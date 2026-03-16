@@ -2313,35 +2313,59 @@ function TranslatorView({ module }: { module?: Module }) {
     if (!text.trim()) return;
     setIsTranslating(true);
     setError(null);
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const prompt = `You are a world-class academic translator specializing in ${subjectField}. 
-      Translate the following text from ${sourceLanguage === 'Auto-detect' ? 'its original language' : sourceLanguage} to ${targetLanguage}.
-      
-      CRITICAL REQUIREMENTS FOR 100% ACCURACY:
-      1. ACADEMIC CONTEXT: Use formal, scholarly language appropriate for university-level research and publication.
-      2. TERMINOLOGY: Apply precise technical terms for the field of ${subjectField}. For South African languages (like isiZulu, Afrikaans, etc.), ensure that modern academic terminology is used correctly, avoiding colloquialisms.
-      3. CULTURAL NUANCE: Maintain the original meaning while respecting the linguistic conventions of ${targetLanguage}.
-      4. GRAMMAR & SYNTAX: Ensure flawless grammatical structure. The translation must read as if it were originally written by an academic in ${targetLanguage}.
-      5. FORMATTING: Preserve all citations, mathematical notations, and structural formatting.
-      6. NO HALLUCINATIONS: If a term is untranslatable, keep the original term in brackets or provide the most accepted academic equivalent.
+    
+    const maxRetries = 3;
+    let attempt = 0;
 
-      TEXT TO TRANSLATE:
-      ${text}`;
+    const performTranslation = async (): Promise<boolean> => {
+      try {
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const prompt = `You are a world-class academic translator specializing in ${subjectField}. 
+        Translate the following text from ${sourceLanguage === 'Auto-detect' ? 'its original language' : sourceLanguage} to ${targetLanguage}.
+        
+        CRITICAL REQUIREMENTS FOR 100% ACCURACY:
+        1. ACADEMIC CONTEXT: Use formal, scholarly language appropriate for university-level research and publication.
+        2. TERMINOLOGY: Apply precise technical terms for the field of ${subjectField}. For South African languages (like isiZulu, Afrikaans, etc.), ensure that modern academic terminology is used correctly, avoiding colloquialisms.
+        3. CULTURAL NUANCE: Maintain the original meaning while respecting the linguistic conventions of ${targetLanguage}.
+        4. GRAMMAR & SYNTAX: Ensure flawless grammatical structure. The translation must read as if it were originally written by an academic in ${targetLanguage}.
+        5. FORMATTING: Preserve all citations, mathematical notations, and structural formatting.
+        6. NO HALLUCINATIONS: If a term is untranslatable, keep the original term in brackets or provide the most accepted academic equivalent.
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
-        contents: prompt,
-      });
-      
-      if (response.text) {
-        setTranslatedText(response.text);
-      } else {
-        throw new Error("No translation generated.");
+        TEXT TO TRANSLATE:
+        ${text}`;
+
+        const response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: prompt,
+        });
+        
+        if (response.text) {
+          setTranslatedText(response.text);
+          return true;
+        } else {
+          throw new Error("No translation generated.");
+        }
+      } catch (err: any) {
+        const errorMsg = err?.message || String(err);
+        
+        if (errorMsg.includes('429') || errorMsg.includes('RESOURCE_EXHAUSTED')) {
+          if (attempt < maxRetries) {
+            attempt++;
+            const delay = Math.pow(2, attempt) * 1000;
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return performTranslation();
+          }
+          throw new Error("The translation service is currently busy due to high demand. Please try again in a few minutes.");
+        }
+        throw err;
       }
+    };
+
+    try {
+      await performTranslation();
     } catch (error: any) {
       console.error('Translation error:', error);
-      setError('Failed to translate. Please check your connection and try again.');
+      setError(error.message || 'Failed to translate. Please check your connection and try again.');
     } finally {
       setIsTranslating(false);
     }
