@@ -131,6 +131,17 @@ function addWavHeader(base64Data: string, sampleRate: number = 24000) {
   const wavBlob = new Blob([header, bytes], { type: 'audio/wav' });
   return URL.createObjectURL(wavBlob);
 }
+
+const isLanguageModule = (module: Module) => {
+  const saLanguages = [
+    'isiZulu', 'isiXhosa', 'Afrikaans', 'Sepedi', 'English', 'Setswana', 'Sesotho', 'Xitsonga', 'siSwati', 'Tshivenda', 'isiNdebele',
+    'Zulu', 'Xhosa', 'Sotho', 'Tswana', 'Venda', 'Ndebele', 'Swati', 'Tsonga'
+  ];
+  const title = module.title.toLowerCase();
+  return saLanguages.some(lang => title.includes(lang.toLowerCase())) || 
+         title.includes('language') || 
+         title.includes('linguistics');
+};
 import { 
   format, 
   addDays, 
@@ -3238,7 +3249,7 @@ function ModuleChatbot({ module, onUpdate, onConfirm }: {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
-      const systemInstruction = `You are a specialized study assistant for the module "${module.title}". 
+      let systemInstruction = `You are a specialized study assistant for the module "${module.title}". 
       Your goal is to help the student understand the material, answer questions, and provide explanations based on the provided module content.
       
       Module Context:
@@ -3257,6 +3268,43 @@ function ModuleChatbot({ module, onUpdate, onConfirm }: {
       3. Be concise, encouraging, and academic in tone.
       4. Use markdown for formatting (bolding, lists, code blocks).
       5. If images are provided, analyze them in the context of the module.`;
+
+      if (isLanguageModule(module)) {
+        systemInstruction = `You are an advanced South African language AI Tutor and Study Assistant for the module "${module.title}". 
+        You help students learn South African languages from beginner level (age 3) to university level.
+
+        Your role combines:
+        • South African language teacher
+        • Pronunciation coach
+        • Study tutor
+        • Academic assistant
+
+        You must teach in a clear, patient, and structured way similar to a real teacher.
+
+        Focus on these five pillars:
+        1. Vocabulary: Teach new words, English translations, and example sentences.
+        2. Grammar: Explain rules in simple English while keeping South African language examples.
+        3. Reading: Provide short passages and help understand vocabulary and sentence meaning.
+        4. Pronunciation: Break difficult words into syllables and explain how to pronounce them. Gently correct pronunciation attempts.
+        5. Writing: Ask the student to construct sentences and correct grammar, spelling, and word order.
+
+        When the student uploads or pastes study notes, transform them into a structured study guide including:
+        • Original South African language text
+        • English translation
+        • Simple English explanation
+        • Key vocabulary list
+        • Summary of the section
+        • Practice questions
+        • Flashcards
+
+        Always keep the South African language text but add English explanations.
+        Act supportive and encouraging. If the student struggles, simplify and break concepts into smaller steps.
+        Regularly quiz the student and repeat difficult words.
+        
+        Module Context:
+        - Title: ${module.title}
+        ${module.notes?.substring(0, 10000) || ''}`;
+      }
 
       const contents: any[] = [];
 
@@ -4273,7 +4321,7 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
     setIsGeneratingNotes(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const prompt = `
+      let prompt = `
         Refine the following raw study notes into a comprehensive, high-quality academic study guide for the module "${module.title}".
         
         Raw Notes:
@@ -4305,6 +4353,28 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
         ${sourceText}
       `;
 
+      if (isLanguageModule(module)) {
+        prompt = `
+          You are an advanced South African language AI Tutor. Transform the following notes into a structured, visually engaging study guide for the module "${module.title}".
+          
+          The study guide MUST include:
+          • Original South African language text
+          • English translation
+          • Simple English explanation
+          • Key vocabulary list (with syllables and pronunciation guides)
+          • Summary of the section
+          • Practice questions
+          • Flashcards (formatted clearly)
+
+          Make the notes visually engaging using markdown tables, structured summaries, and creative visual explanations.
+          Always keep the South African language text but add English explanations.
+          Act supportive and encouraging.
+
+          Raw Notes:
+          ${sourceText}
+        `;
+      }
+
       const response = await ai.models.generateContent({
         model: "gemini-3.1-pro-preview",
         contents: prompt,
@@ -4332,9 +4402,7 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
         contextText += `\n\nData from Excel: ${JSON.stringify(data.excelData)}`;
       }
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Summarize the following content for the module "${module.title}". 
+      let prompt = `Summarize the following content for the module "${module.title}". 
         
         CRITICAL GUIDELINES:
         1. Structure the summary based on the identified Learning Outcomes.
@@ -4346,7 +4414,26 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
         
         Content:
         ${contextText}
-        ${currentNotes ? `Context: ${currentNotes.substring(0, 5000)}` : ''}`,
+        ${currentNotes ? `Context: ${currentNotes.substring(0, 5000)}` : ''}`;
+
+      if (isLanguageModule(module)) {
+        prompt = `Summarize the following South African language content for the module "${module.title}". 
+        
+        CRITICAL GUIDELINES:
+        1. Provide the Original South African language text summary.
+        2. Provide an English translation for the summary.
+        3. Include a Simple English explanation of the key concepts.
+        4. List Key Vocabulary with English translations.
+        5. Act as a supportive South African language teacher.
+        
+        Content:
+        ${contextText}
+        ${currentNotes ? `Context: ${currentNotes.substring(0, 5000)}` : ''}`;
+      }
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
       });
       handleUpdate({ summary: response.text });
     } catch (error) {
