@@ -1,0 +1,120 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Extended user profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "email": { "type": "string" },
+        "username": { "type": "string" },
+        "institution": { "type": "string" },
+        "studentLevel": { "type": "string", "enum": ["High School", "University"] },
+        "yearGrade": { "type": "string" },
+        "defaultPassMark": { "type": "number", "description": "Default pass mark percentage for modules" },
+        "studyPreferences": {
+          "type": "object",
+          "properties": {
+            "preferredStartTime": { "type": "string" },
+            "preferredEndTime": { "type": "string" },
+            "sessionDuration": { "type": "number" },
+            "breakDuration": { "type": "number" }
+          }
+        },
+        "sharedWith": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["uid", "firstName", "lastName", "email", "username", "institution", "studentLevel", "yearGrade", "sharedWith"]
+    },
+    "Module": {
+      "title": "Module",
+      "description": "A study module or subject",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "moduleType": { "type": "string", "enum": ["Exam", "Portfolio", "Assessment Only"] },
+        "passMark": { "type": "number", "description": "Pass mark percentage for this module" },
+        "examDate": { "type": "string" },
+        "portfolioDate": { "type": "string" },
+        "chatHistory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "role": { "type": "string", "enum": ["user", "model"] },
+              "text": { "type": "string" },
+              "timestamp": { "type": "string" }
+            },
+            "required": ["id", "role", "text", "timestamp"]
+          }
+        }
+      },
+      "required": ["id", "title", "moduleType"]
+    },
+    "Assessment": {
+      "title": "Assessment",
+      "description": "An assignment or exam task",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "weight": { "type": "number" },
+        "markReceived": { "type": "number" },
+        "studyUnits": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "title", "dueDate", "weight"]
+    },
+    "Community": {
+      "title": "Community",
+      "description": "A group for a specific module or subject",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "moduleTitle": { "type": "string" },
+        "studentLevel": { "type": "string" },
+        "members": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "name", "moduleTitle"]
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "description": "A message in a community chat",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "senderId", "senderName", "text", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile data"
+    },
+    "/users/{userId}/modules/{moduleId}": {
+      "schema": "Module",
+      "description": "User's study modules"
+    },
+    "/users/{userId}/modules/{moduleId}/assessments/{assessmentId}": {
+      "schema": "Assessment",
+      "description": "Assessments for a specific module"
+    },
+    "/communities/{communityId}": {
+      "schema": "Community",
+      "description": "Community group data"
+    },
+    "/communities/{communityId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Messages within a community"
+    }
+  }
+}

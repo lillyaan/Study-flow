@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields: uid, firstName, lastName, email, username, institution, studentLevel, yearGrade, sharedWith
+    //
+    // Collection: users/{userId}/modules
+    // Document ID: {moduleId}
+    // Fields: id, title, moduleType, examDate, portfolioDate, chatHistory
+    //
+    // Collection: users/{userId}/modules/{moduleId}/assessments
+    // Document ID: {assessmentId}
+    // Fields: id, title, dueDate, weight, markReceived, studyUnits
+    //
+    // Collection: communities
+    // Document ID: {communityId}
+    // Fields: id, name, moduleTitle, studentLevel, members
+    //
+    // Collection: communities/{communityId}/messages
+    // Document ID: {messageId}
+    // Fields: id, senderId, senderName, text, timestamp
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "lillyaan14@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isSharedWith(userId) {
+      let userDoc = get(/databases/$(database)/documents/users/$(userId));
+      return isAuthenticated() && request.auth.uid in userDoc.data.sharedWith;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'firstName', 'lastName', 'email', 'username', 'institution', 'studentLevel', 'yearGrade', 'sharedWith']) &&
+             data.uid is string && data.firstName is string && data.lastName is string &&
+             data.email is string && data.username is string && data.institution is string &&
+             data.studentLevel in ['High School', 'University'] && data.yearGrade is string &&
+             data.sharedWith is list;
+    }
+
+    // Rules
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isSharedWith(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+      allow delete: if isAdmin();
+
+      match /modules/{moduleId} {
+        allow read: if isOwner(userId) || isSharedWith(userId) || isAdmin();
+        allow write: if isOwner(userId) || isAdmin();
+      }
+
+      match /schedule/{itemId} {
+        allow read: if isOwner(userId) || isSharedWith(userId) || isAdmin();
+        allow write: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    match /communities/{communityId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated(); // Simplified for joining
+
+      match /messages/{messageId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+      }
+    }
+  }
+}
