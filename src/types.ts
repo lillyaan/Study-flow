@@ -31,6 +31,9 @@ export interface StudyUnit {
   summary?: string;
   learningOutcomes?: string[];
   resources?: UnitResource[];
+  flashcards?: Flashcard[];
+  quiz?: Quiz;
+  practiceExams?: PracticeExam[];
 }
 
 export interface Flashcard {
@@ -48,6 +51,7 @@ export interface PracticeExamQuestion {
   options: string[];
   correctAnswer: number;
   explanation?: string;
+  keyConcepts?: string[];
 }
 
 export interface PracticeExam {
@@ -65,6 +69,7 @@ export interface QuizQuestion {
   options: string[];
   correctAnswer: number;
   explanation?: string;
+  keyConcepts?: string[];
 }
 
 export interface Quiz {
@@ -118,6 +123,7 @@ export interface Module {
   aiOverview?: string; // AI generated overview for the module card
   learningOutcomes?: string[]; // AI identified learning outcomes
   resources?: UnitResource[];
+  isLanguage?: boolean; // Explicitly indicate if this is a language module
 }
 
 export interface UserProfile {
@@ -161,9 +167,15 @@ export interface UserProfile {
 export interface Community {
   id: string;
   name: string;
+  description?: string;
+  category?: string;
   moduleTitle: string;
   studentLevel: string;
   members: string[];
+  pinnedMessages?: string[]; // IDs of pinned messages
+  resources?: { id: string; name: string; content: string; type: string; timestamp: any; addedBy: string; addedByName: string }[];
+  avatarColor?: string;
+  inviteCode?: string;
 }
 
 export interface ChatMessage {
@@ -181,6 +193,7 @@ export interface ScheduleItem {
   start: Date;
   end: Date;
   moduleId?: string;
+  completed?: boolean;
 }
 
 export interface AppState {

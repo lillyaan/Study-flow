@@ -12,6 +12,8 @@ import {
   CheckCircle2, 
   AlertCircle,
   Clock,
+  ShieldAlert,
+  WifiOff,
   LayoutDashboard,
   Quote,
   LogOut,
@@ -78,8 +80,14 @@ import {
   Heart,
   ThumbsUp,
   ThumbsDown,
+  GraduationCap,
+  Briefcase,
+  ClipboardCheck,
+  Pin,
+  Bookmark,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import ReactMarkdown from 'react-markdown';
 import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
 
@@ -133,6 +141,8 @@ function addWavHeader(base64Data: string, sampleRate: number = 24000) {
 }
 
 const isLanguageModule = (module: Module) => {
+  if (module.isLanguage !== undefined) return module.isLanguage;
+  
   const saLanguages = [
     'isiZulu', 'isiXhosa', 'Afrikaans', 'Sepedi', 'English', 'Setswana', 'Sesotho', 'Xitsonga', 'siSwati', 'Tshivenda', 'isiNdebele',
     'Zulu', 'Xhosa', 'Sotho', 'Tswana', 'Venda', 'Ndebele', 'Swati', 'Tsonga'
@@ -232,7 +242,100 @@ const QUOTES = [
 
 // --- Components ---
 
-function ConfirmDialog({ isOpen, title, message, onConfirm, onClose }: any) {
+function TabButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+        active 
+          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-100' 
+          : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-100'
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function AIErrorMessage({ message, onRetry }: { message: string, onRetry?: () => void }) {
+  const getErrorInfo = (msg: string) => {
+    const lowerMsg = msg.toLowerCase();
+    if (lowerMsg.includes('quota') || lowerMsg.includes('429')) {
+      return {
+        title: "Quota Exceeded",
+        description: "You've reached the free limit for AI requests. Please wait a few minutes or try again tomorrow.",
+        icon: <Clock size={16} />,
+        guidance: "Try simplifying your request or checking back later."
+      };
+    }
+    if (lowerMsg.includes('safety') || lowerMsg.includes('blocked')) {
+      return {
+        title: "Content Filtered",
+        description: "The AI couldn't process this request due to safety filters.",
+        icon: <ShieldAlert size={16} />,
+        guidance: "Try rephrasing your prompt or using different content."
+      };
+    }
+    if (lowerMsg.includes('network') || lowerMsg.includes('fetch') || lowerMsg.includes('offline')) {
+      return {
+        title: "Connection Issue",
+        description: "We're having trouble reaching the AI service right now.",
+        icon: <WifiOff size={16} />,
+        guidance: "Please check your internet connection and try again."
+      };
+    }
+    if (lowerMsg.includes('api key') || lowerMsg.includes('invalid')) {
+      return {
+        title: "Configuration Error",
+        description: "There's an issue with the AI setup.",
+        icon: <Settings size={16} />,
+        guidance: "Please refresh the page or contact support if this persists."
+      };
+    }
+    return {
+      title: "AI Generation Error",
+      description: msg,
+      icon: <AlertCircle size={16} />,
+      guidance: "An unexpected error occurred while generating content."
+    };
+  };
+
+  const info = getErrorInfo(message);
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="p-5 bg-red-50 text-red-600 rounded-3xl border border-red-100 shadow-sm space-y-3"
+    >
+      <div className="flex items-start gap-3">
+        <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+          {info.icon}
+        </div>
+        <div className="flex-1">
+          <h6 className="font-bold text-red-800 text-sm">{info.title}</h6>
+          <p className="text-xs text-red-600/80 mt-0.5 leading-relaxed">{info.description}</p>
+        </div>
+      </div>
+      
+      <div className="pl-11 space-y-3">
+        <p className="text-[10px] font-medium text-red-500/60 uppercase tracking-widest">Guidance: {info.guidance}</p>
+        {onRetry && (
+          <button 
+            onClick={onRetry}
+            className="px-5 py-2 bg-white text-red-600 border border-red-200 rounded-xl text-xs font-bold hover:bg-red-100 transition-all flex items-center gap-2 shadow-sm"
+          >
+            <RotateCcw size={12} />
+            Try Again
+          </button>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+function ConfirmDialog({ isOpen, title, message, onConfirm, onClose, confirmText = "Confirm", isDanger = false }: any) {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -251,8 +354,8 @@ function ConfirmDialog({ isOpen, title, message, onConfirm, onClose }: any) {
             className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden"
           >
             <div className="p-8">
-              <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center mb-6 text-red-600">
-                <AlertCircle size={24} />
+              <div className={`w-12 h-12 ${isDanger ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'} rounded-2xl flex items-center justify-center mb-6`}>
+                {isDanger ? <AlertCircle size={24} /> : <CheckCircle2 size={24} />}
               </div>
               <h3 className="text-xl font-bold text-slate-900 mb-2">{title}</h3>
               <p className="text-slate-500 leading-relaxed">{message}</p>
@@ -269,9 +372,9 @@ function ConfirmDialog({ isOpen, title, message, onConfirm, onClose }: any) {
                   onConfirm();
                   onClose();
                 }}
-                className="flex-1 px-6 py-4 text-sm font-bold text-red-600 hover:bg-red-50 transition-colors border-l border-slate-100"
+                className={`flex-1 px-6 py-4 text-sm font-bold ${isDanger ? 'text-red-600' : 'text-indigo-600'} hover:bg-slate-50 transition-colors border-l border-slate-100`}
               >
-                Delete
+                {confirmText}
               </button>
             </div>
           </motion.div>
@@ -304,9 +407,11 @@ export default function App() {
     testConnection();
   }, []);
 
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'modules' | 'schedule' | 'marks' | 'communities' | 'sharing' | 'settings' | 'virtual_classroom'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'modules' | 'schedule' | 'marks' | 'communities' | 'sharing' | 'settings' | 'virtual_classroom' | 'youtube'>('dashboard');
+  const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [isAiTutorOpen, setIsAiTutorOpen] = useState(true);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [editingScheduleItem, setEditingScheduleItem] = useState<ScheduleItem | null>(null);
@@ -316,19 +421,25 @@ export default function App() {
     title: string;
     message: string;
     onConfirm: () => void;
+    confirmText?: string;
+    isDanger?: boolean;
   }>({
     isOpen: false,
     title: '',
     message: '',
     onConfirm: () => {},
+    confirmText: 'Confirm',
+    isDanger: false
   });
 
-  const confirmAction = (title: string, message: string, onConfirm: () => void) => {
+  const confirmAction = (title: string, message: string, onConfirm: () => void, confirmText: string = "Confirm", isDanger: boolean = false) => {
     setConfirmDialog({
       isOpen: true,
       title,
       message,
-      onConfirm
+      onConfirm,
+      confirmText,
+      isDanger
     });
   };
 
@@ -533,6 +644,7 @@ export default function App() {
   const generateSmartSchedule = async () => {
     if (!profile || modules.length === 0) return;
     setIsGenerating(true);
+    setScheduleError(null);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
       const model = "gemini-3.1-pro-preview";
@@ -562,14 +674,16 @@ export default function App() {
         Rules:
         1. Prioritize assessments with earlier due dates and higher weights.
         2. ONLY schedule study sessions during the "Weekly Availability" slots that are enabled. If none are enabled, use the "Preferred Study Hours" daily.
-        3. Explicitly schedule dedicated time blocks for:
+        3. For modules with an "Exam" type, schedule "exam_prep" sessions starting at least 7 days before the examDate.
+        4. For modules with a "Portfolio" type, schedule "portfolio_prep" sessions regularly leading up to the portfolioDate.
+        5. Explicitly schedule dedicated time blocks for:
            - Working on specific assignments (type: 'assignment')
            - Preparing for upcoming exams (type: 'exam_prep')
            - Working on portfolios (type: 'portfolio_prep')
-        4. Include general study sessions (type: 'study_session') for ongoing module work.
-        5. Include breaks of approximately ${profile.studyPreferences?.breakDuration || 15} minutes between sessions.
-        6. Study sessions should be approximately ${profile.studyPreferences?.sessionDuration || 60} minutes long.
-        7. Return ONLY a JSON array of objects with: { title, type, start (ISO string), end (ISO string), moduleId (optional) }.
+        6. Include general study sessions (type: 'study_session') for ongoing module work.
+        7. Include breaks of approximately ${profile.studyPreferences?.breakDuration || 15} minutes between sessions.
+        8. Study sessions should be approximately ${profile.studyPreferences?.sessionDuration || 60} minutes long.
+        9. Return ONLY a JSON array of objects with: { title, type, start (ISO string), end (ISO string), moduleId (optional) }.
       `;
 
       const response = await ai.models.generateContent({
@@ -594,7 +708,15 @@ export default function App() {
         }
       });
 
+      if (!response.text) {
+        throw new Error("AI failed to generate a study schedule. Please try again.");
+      }
+
       const aiSchedule = JSON.parse(response.text);
+      if (!Array.isArray(aiSchedule) || aiSchedule.length === 0) {
+        throw new Error("AI generated an empty or invalid schedule. Please try again.");
+      }
+
       const batch = writeBatch(db);
       
       // Clear existing schedule for a fresh start
@@ -613,9 +735,9 @@ export default function App() {
       await batch.commit();
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
-    } catch (error) {
+    } catch (error: any) {
       console.error("AI Generation Error:", error);
-      alert("Failed to generate smart timetable.");
+      setScheduleError(`Failed to generate smart timetable: ${error.message || 'Unknown error'}. Please check your connection and try again.`);
     } finally {
       setIsGenerating(false);
     }
@@ -715,6 +837,54 @@ export default function App() {
     await updateDoc(doc(db, 'communities', commId), {
       members: arrayUnion(user.uid)
     });
+  };
+
+  const handlePinMessage = async (commId: string, message: ChatMessage) => {
+    if (!user) return;
+    await updateDoc(doc(db, 'communities', commId), {
+      pinnedMessages: arrayUnion({
+        id: message.id,
+        text: message.text,
+        senderName: message.senderName,
+        timestamp: message.timestamp
+      })
+    });
+  };
+
+  const handleAddResource = async (commId: string, resource: { title: string, url: string, type: 'link' | 'file' }) => {
+    if (!user) return;
+    await updateDoc(doc(db, 'communities', commId), {
+      resources: arrayUnion({
+        id: crypto.randomUUID(),
+        ...resource,
+        addedBy: user.uid,
+        addedAt: serverTimestamp()
+      })
+    });
+  };
+
+  const handleSaveResourceToModule = async (moduleId: string, resource: any) => {
+    try {
+      const moduleRef = doc(db, 'modules', moduleId);
+      const module = modules.find(m => m.id === moduleId);
+      if (!module) return;
+
+      const updatedResources = [
+        ...(module.resources || []),
+        {
+          id: Math.random().toString(36).substr(2, 9),
+          name: resource.title || resource.name,
+          type: resource.type,
+          content: resource.url || resource.content,
+          timestamp: Date.now()
+        }
+      ];
+
+      await updateDoc(moduleRef, { resources: updatedResources });
+      confirmAction("Saved!", `Successfully saved "${resource.title || resource.name}" to ${module.title}`, () => {});
+    } catch (error) {
+      console.error("Error saving resource to module:", error);
+    }
   };
 
   const handleShareProfile = async (friendEmail: string) => {
@@ -914,9 +1084,14 @@ export default function App() {
         <nav className="flex flex-wrap items-center gap-2 mb-8 bg-white p-2 rounded-3xl border border-slate-100 shadow-sm overflow-x-auto no-scrollbar">
           <SidebarItem active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard size={18} />} label="Dashboard" />
           <SidebarItem active={activeTab === 'modules'} onClick={() => setActiveTab('modules')} icon={<BookOpen size={18} />} label="Modules" count={modules.length} />
+          
+          <div className="flex items-center gap-1 bg-indigo-50/50 p-1 rounded-2xl border border-indigo-100/50">
+            <SidebarItem active={activeTab === 'youtube'} onClick={() => setActiveTab('youtube')} icon={<Youtube size={18} />} label="YouTube" />
+            <SidebarItem active={activeTab === 'virtual_classroom'} onClick={() => setActiveTab('virtual_classroom')} icon={<Video size={18} />} label="Live Lessons" />
+          </div>
+
           <SidebarItem active={activeTab === 'schedule'} onClick={() => setActiveTab('schedule')} icon={<Calendar size={18} />} label="Timetable" count={schedule.length} />
           <SidebarItem active={activeTab === 'marks'} onClick={() => setActiveTab('marks')} icon={<CheckCircle2 size={18} />} label="Marks" />
-          <SidebarItem active={activeTab === 'virtual_classroom'} onClick={() => setActiveTab('virtual_classroom')} icon={<Video size={18} />} label="Live Lesson" />
           <SidebarItem active={activeTab === 'communities'} onClick={() => setActiveTab('communities')} icon={<Users size={18} />} label="Communities" />
           <SidebarItem active={activeTab === 'sharing'} onClick={() => setActiveTab('sharing')} icon={<Share2 size={18} />} label="Sharing" />
           <SidebarItem active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Settings size={18} />} label="Settings" />
@@ -964,9 +1139,10 @@ export default function App() {
                   setActiveTab={setActiveTab} 
                   onGenerate={generateSmartSchedule}
                   isGenerating={isGenerating}
+                  error={scheduleError}
                 />
               )}
-              {activeTab === 'modules' && <ModulesView profile={profile} modules={modules} schedule={schedule} onUpdate={handleUpdateModule} onAddAssessment={handleAddAssessment} onRemove={handleRemoveModule} onConfirm={confirmAction} />}
+              {activeTab === 'modules' && <ModulesView profile={profile} modules={modules} communities={communities} schedule={schedule} onUpdate={handleUpdateModule} onAddAssessment={handleAddAssessment} onRemove={handleRemoveModule} onConfirm={confirmAction} />}
               {activeTab === 'schedule' && (
                 <TimetableView 
                   schedule={schedule} 
@@ -974,8 +1150,9 @@ export default function App() {
                   onExport={handleExport} 
                   onGenerate={generateSmartSchedule} 
                   isGenerating={isGenerating}
-                  onAdd={() => {
-                    setEditingScheduleItem(null);
+                  error={scheduleError}
+                  onAdd={(initialData?: any) => {
+                    setEditingScheduleItem(initialData || null);
                     setIsScheduleModalOpen(true);
                   }}
                   onEdit={(item: ScheduleItem) => {
@@ -983,10 +1160,64 @@ export default function App() {
                     setIsScheduleModalOpen(true);
                   }}
                   onDelete={handleDeleteSchedule}
+                  onUpdate={handleEditSchedule}
                 />
               )}
               {activeTab === 'marks' && <MarksView modules={modules} onUpdate={handleUpdateModule} />}
               {activeTab === 'virtual_classroom' && <VirtualClassroomView modules={modules} />}
+              {activeTab === 'youtube' && (
+                <div className="space-y-6">
+                  <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8">
+                    <h2 className="text-2xl font-bold text-slate-800 mb-2">YouTube Study Resources</h2>
+                    <p className="text-slate-500">Search and analyze YouTube videos for your modules.</p>
+                  </div>
+                  {modules.length > 0 ? (
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                      <div className="lg:col-span-1 space-y-2">
+                        <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-4">Select Module</h3>
+                        <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 no-scrollbar">
+                          {modules.map(m => (
+                            <button
+                              key={m.id}
+                              onClick={() => setSelectedModuleId(m.id)}
+                              className={`w-full text-left px-4 py-3 rounded-2xl transition-all ${
+                                selectedModuleId === m.id 
+                                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' 
+                                  : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-100'
+                              }`}
+                            >
+                              <div className="font-bold text-sm truncate">{m.title}</div>
+                              <div className="text-[10px] opacity-70">{m.moduleType}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="lg:col-span-3">
+                        {selectedModuleId ? (
+                          <YoutubeView 
+                            module={modules.find(m => m.id === selectedModuleId)!} 
+                            onUpdate={(updates) => handleUpdateModule(selectedModuleId, updates)} 
+                          />
+                        ) : (
+                          <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-12 text-center">
+                            <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                              <Youtube className="text-indigo-600" size={32} />
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-800 mb-2">Select a Module</h3>
+                            <p className="text-slate-500 max-w-xs mx-auto">Choose a module from the list to manage its YouTube study resources.</p>
+                          </div>
+                         )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-12 text-center">
+                      <BookOpen className="text-slate-200 mx-auto mb-4" size={48} />
+                      <h3 className="text-lg font-bold text-slate-800 mb-2">No Modules Found</h3>
+                      <p className="text-slate-500">Add a module first to use YouTube Study Resources.</p>
+                    </div>
+                  )}
+                </div>
+              )}
               {activeTab === 'communities' && (
                 <CommunitiesView 
                   communities={communities} 
@@ -995,7 +1226,13 @@ export default function App() {
                   messages={messages} 
                   onSendMessage={handleSendMessage}
                   onJoin={handleJoinCommunity}
+                  onPinMessage={handlePinMessage}
+                  onAddResource={handleAddResource}
+                  onSaveResourceToModule={handleSaveResourceToModule}
                   user={user}
+                  profile={profile}
+                  modules={modules}
+                  onConfirm={confirmAction}
                 />
               )}
               {activeTab === 'sharing' && <SharingView sharedProfiles={sharedProfiles} onShare={handleShareProfile} />}
@@ -1066,6 +1303,8 @@ export default function App() {
         message={confirmDialog.message}
         onConfirm={confirmDialog.onConfirm}
         onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+        confirmText={confirmDialog.confirmText}
+        isDanger={confirmDialog.isDanger}
       />
     </div>
   );
@@ -1229,7 +1468,7 @@ function LiveClock() {
   );
 }
 
-function DashboardView({ profile, schedule, modules, onExport, setActiveTab, onGenerate, isGenerating }: any) {
+function DashboardView({ profile, schedule, modules, onExport, setActiveTab, onGenerate, isGenerating, error }: any) {
   const [now, setNow] = useState(new Date());
   
   useEffect(() => {
@@ -1264,6 +1503,10 @@ function DashboardView({ profile, schedule, modules, onExport, setActiveTab, onG
         <StatCard label="Exams" value={modules.filter((m: any) => m.moduleType === 'Exam').length} icon={<AlertCircle className="text-amber-500" />} />
         <StatCard label="Communities" value="Active" icon={<Users className="text-purple-500" />} />
       </div>
+
+      {error && (
+        <AIErrorMessage message={error} onRetry={onGenerate} />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
@@ -1357,8 +1600,9 @@ function DashboardView({ profile, schedule, modules, onExport, setActiveTab, onG
   );
 }
 
-function ModulesView({ profile, modules, schedule, onUpdate, onAddAssessment, onRemove, onConfirm }: any) {
+function ModulesView({ profile, modules, communities, schedule, onUpdate, onAddAssessment, onRemove, onConfirm }: any) {
   const [filter, setFilter] = useState<string>('all');
+  const [moduleDetailTab, setModuleDetailTab] = useState<'ai_suite' | 'youtube' | 'live_lessons'>('ai_suite');
 
   const filteredModules = filter === 'all' 
     ? modules 
@@ -1404,6 +1648,7 @@ function ModulesView({ profile, modules, schedule, onUpdate, onAddAssessment, on
             module={module} 
             profile={profile}
             modules={modules}
+            communities={communities}
             schedule={schedule}
             onUpdate={(u: any) => onUpdate(module.id, u)} 
             onAddAssessment={() => onAddAssessment(module.id)}
@@ -1413,6 +1658,76 @@ function ModulesView({ profile, modules, schedule, onUpdate, onAddAssessment, on
             isDetailed={filter !== 'all'}
           />
         ))}
+        {filter !== 'all' && filteredModules[0] && (
+          <div className="space-y-6">
+            <div className="flex items-center gap-2 bg-white p-2 rounded-2xl border border-slate-100 shadow-sm overflow-x-auto no-scrollbar">
+              <TabButton 
+                active={moduleDetailTab === 'ai_suite'} 
+                onClick={() => setModuleDetailTab('ai_suite')} 
+                icon={<Sparkles size={16} />} 
+                label="AI Study Suite" 
+              />
+              <TabButton 
+                active={moduleDetailTab === 'youtube'} 
+                onClick={() => setModuleDetailTab('youtube')} 
+                icon={<Youtube size={16} />} 
+                label="YouTube" 
+              />
+              <TabButton 
+                active={moduleDetailTab === 'live_lessons'} 
+                onClick={() => setModuleDetailTab('live_lessons')} 
+                icon={<Video size={16} />} 
+                label="Live Lessons" 
+              />
+            </div>
+
+            <AnimatePresence mode="wait">
+              {moduleDetailTab === 'ai_suite' && (
+                <motion.div 
+                  key="ai_suite"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="space-y-6"
+                >
+                  <VideoExplanationGenerator module={filteredModules[0]} />
+                  <StudyMaterials 
+                    module={filteredModules[0]} 
+                    onUpdate={(u: any) => onUpdate(filteredModules[0].id, u)} 
+                    profile={profile}
+                    modules={modules}
+                    communities={communities}
+                    schedule={schedule}
+                    onConfirm={onConfirm}
+                  />
+                </motion.div>
+              )}
+              {moduleDetailTab === 'youtube' && (
+                <motion.div 
+                  key="youtube"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                >
+                  <YoutubeView 
+                    module={filteredModules[0]} 
+                    onUpdate={(u: any) => onUpdate(filteredModules[0].id, u)} 
+                  />
+                </motion.div>
+              )}
+              {moduleDetailTab === 'live_lessons' && (
+                <motion.div 
+                  key="live_lessons"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                >
+                  <VirtualClassroomView modules={[filteredModules[0]]} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
         {filteredModules.length === 0 && (
           <div className="bg-white rounded-[2rem] p-16 border-2 border-dashed border-slate-100 text-center">
             <BookOpen size={48} className="mx-auto text-slate-200 mb-4" />
@@ -1572,128 +1887,695 @@ function VirtualClassroomView({ modules }: any) {
   );
 }
 
-function CommunitiesView({ communities, activeCommunity, setActiveCommunity, messages, onSendMessage, onJoin, user }: any) {
+function CommunitiesView({ communities, activeCommunity, setActiveCommunity, messages, onSendMessage, onJoin, onPinMessage, onAddResource, onSaveResourceToModule, user, profile, modules, onConfirm }: any) {
   const [msg, setMsg] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [activeSubTab, setActiveSubTab] = useState<'chat' | 'resources' | 'members'>('chat');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isResourceModalOpen, setIsResourceModalOpen] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [isJoining, setIsJoining] = useState(false);
+  const [savingResource, setSavingResource] = useState<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const CATEGORIES = ['All', 'Study Group', 'Exam Prep', 'General', 'Q&A', 'Resources'];
+
+  const handleJoinByCode = async () => {
+    if (!joinCode.trim()) return;
+    setIsJoining(true);
+    try {
+      const q = query(collection(db, 'communities'), where('inviteCode', '==', joinCode.trim().toUpperCase()));
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
+        onConfirm("Invalid Code", "No community found with this invite code.", () => {});
+        return;
+      }
+
+      const communityDoc = querySnapshot.docs[0];
+      const communityData = communityDoc.data();
+      
+      if (communityData.members.includes(user.uid)) {
+        onConfirm("Already a Member", "You are already a member of this community.", () => {});
+        setActiveCommunity({ id: communityDoc.id, ...communityData });
+        return;
+      }
+
+      const communityRef = doc(db, 'communities', communityDoc.id);
+      await updateDoc(communityRef, {
+        members: arrayUnion(user.uid)
+      });
+
+      onConfirm("Joined!", `You have successfully joined ${communityData.name}`, () => {});
+      setActiveCommunity({ id: communityDoc.id, ...communityData });
+      setJoinCode('');
+    } catch (error) {
+      console.error("Error joining community:", error);
+      onConfirm("Error", "Failed to join community. Please try again.", () => {});
+    } finally {
+      setIsJoining(false);
+    }
+  };
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, activeSubTab]);
+
+  const filteredCommunities = communities.filter((c: any) => {
+    const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                         c.moduleTitle.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = selectedCategory === 'All' || c.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
 
   if (activeCommunity) {
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-[calc(100vh-12rem)] flex flex-col bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <div className="flex items-center gap-4">
-            <button onClick={() => setActiveCommunity(null)} className="p-2 hover:bg-white rounded-xl transition-all">
-              <ArrowLeft size={20} />
-            </button>
-            <div>
-              <h3 className="font-bold text-lg">{activeCommunity.name}</h3>
-              <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">{activeCommunity.moduleTitle}</p>
+        {/* Community Header */}
+        <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <button onClick={() => { setActiveCommunity(null); setActiveSubTab('chat'); }} className="p-2 hover:bg-white rounded-xl transition-all">
+                <ArrowLeft size={20} />
+              </button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-lg">{activeCommunity.name}</h3>
+                  {activeCommunity.category && (
+                    <span className="text-[10px] font-bold bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                      {activeCommunity.category}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">{activeCommunity.moduleTitle}</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setIsInviteModalOpen(true)}
+                className="p-2.5 bg-white border border-slate-100 rounded-xl text-slate-600 hover:text-indigo-600 hover:border-indigo-100 shadow-sm transition-all flex items-center gap-2 text-xs font-bold"
+              >
+                <UserPlus size={16} />
+                Invite
+              </button>
+              <div className="flex bg-white p-1 rounded-xl border border-slate-100 shadow-sm">
+              <button 
+                onClick={() => setActiveSubTab('chat')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${activeSubTab === 'chat' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+              >
+                <MessageSquare size={14} />
+                Chat
+              </button>
+              <button 
+                onClick={() => setActiveSubTab('resources')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${activeSubTab === 'resources' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+              >
+                <Layers size={14} />
+                Resources
+              </button>
+              <button 
+                onClick={() => setActiveSubTab('members')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${activeSubTab === 'members' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+              >
+                <Users size={14} />
+                Members
+              </button>
             </div>
           </div>
-          <div className="flex -space-x-2">
-            {[1,2,3].map(i => (
-              <div key={i} className="w-8 h-8 rounded-full bg-indigo-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-indigo-600">
-                U{i}
+        </div>
+      </div>
+
+        {/* Community Content */}
+        <div className="flex-1 overflow-hidden flex">
+          <div className="flex-1 flex flex-col min-w-0">
+            {activeSubTab === 'chat' && (
+              <>
+                <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/30">
+                  {messages.length === 0 && (
+                    <div className="h-full flex flex-col items-center justify-center text-center p-8">
+                      <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-200 mb-4">
+                        <MessageCircle size={32} />
+                      </div>
+                      <p className="text-slate-400 italic">No messages yet. Start the conversation!</p>
+                    </div>
+                  )}
+                  {messages.map((m: any) => (
+                    <div key={m.id} className={`flex flex-col ${m.senderId === user.uid ? 'items-end' : 'items-start'}`}>
+                      <div className={`max-w-[80%] p-4 rounded-2xl shadow-sm relative group ${
+                        m.senderId === user.uid ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white text-slate-800 rounded-tl-none border border-slate-100'
+                      }`}>
+                        {m.senderId !== user.uid && <p className="text-[10px] font-bold uppercase tracking-wider mb-1 opacity-50">{m.senderName}</p>}
+                        <p className="text-sm leading-relaxed">{m.text}</p>
+                        
+                        <button 
+                          onClick={() => onPinMessage(activeCommunity.id, m)}
+                          className="absolute -right-8 top-0 p-1.5 text-slate-300 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all"
+                          title="Pin message"
+                        >
+                          <Pin size={14} />
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1 px-1">{m.timestamp?.toDate ? format(m.timestamp.toDate(), 'HH:mm') : 'Just now'}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="p-6 border-t border-slate-100 bg-white">
+                  <form 
+                    onSubmit={(e) => { e.preventDefault(); onSendMessage(msg); setMsg(''); }}
+                    className="flex gap-3"
+                  >
+                    <input 
+                      className="flex-1 bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all"
+                      placeholder="Type your message..."
+                      value={msg}
+                      onChange={(e) => setMsg(e.target.value)}
+                    />
+                    <button className="bg-indigo-600 text-white p-4 rounded-2xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-[0.98]">
+                      <Send size={20} />
+                    </button>
+                  </form>
+                </div>
+              </>
+            )}
+
+            {activeSubTab === 'resources' && (
+              <div className="flex-1 overflow-y-auto p-8 space-y-6">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-slate-800">Shared Resources</h4>
+                  <button 
+                    onClick={() => setIsResourceModalOpen(true)}
+                    className="text-indigo-600 text-xs font-bold hover:underline flex items-center gap-1"
+                  >
+                    <Plus size={14} /> Add Resource
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {(activeCommunity.resources || []).length === 0 ? (
+                    <div className="col-span-full py-12 text-center bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                      <Layers size={32} className="mx-auto text-slate-200 mb-2" />
+                      <p className="text-slate-400 italic text-sm">No resources shared yet.</p>
+                    </div>
+                  ) : (
+                    activeCommunity.resources.map((res: any) => (
+                      <div key={res.id} className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center gap-4">
+                        <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
+                          {res.type === 'link' ? <LinkIcon size={18} /> : <FileText size={18} />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold truncate">{res.title}</p>
+                          <div className="flex items-center gap-3">
+                            <a href={res.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-indigo-600 hover:underline truncate block">
+                              {res.url}
+                            </a>
+                            <button 
+                              onClick={() => setSavingResource(res)}
+                              className="text-[10px] font-bold text-slate-400 hover:text-indigo-600 flex items-center gap-1 transition-colors"
+                            >
+                              <Bookmark size={10} /> Save
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
-            ))}
+            )}
+
+            {activeSubTab === 'members' && (
+              <div className="flex-1 overflow-y-auto p-8 space-y-6">
+                <h4 className="font-bold text-slate-800">Community Members ({activeCommunity.members?.length || 0})</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {activeCommunity.members?.map((memberId: string) => (
+                    <div key={memberId} className="p-4 bg-white border border-slate-100 rounded-2xl shadow-sm flex items-center gap-3">
+                      <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
+                        <User size={20} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold">{memberId === user.uid ? 'You' : 'Member'}</p>
+                        <p className="text-[10px] text-slate-400 uppercase tracking-widest">Student</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/30">
-          {messages.map((m: any) => (
-            <div key={m.id} className={`flex flex-col ${m.senderId === user.uid ? 'items-end' : 'items-start'}`}>
-              <div className={`max-w-[80%] p-4 rounded-2xl shadow-sm ${
-                m.senderId === user.uid ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white text-slate-800 rounded-tl-none border border-slate-100'
-              }`}>
-                {m.senderId !== user.uid && <p className="text-[10px] font-bold uppercase tracking-wider mb-1 opacity-50">{m.senderName}</p>}
-                <p className="text-sm leading-relaxed">{m.text}</p>
+          {/* Sidebar for Pinned Messages */}
+          {activeSubTab === 'chat' && (
+            <div className="hidden xl:block w-80 border-l border-slate-100 bg-slate-50/20 p-6 overflow-y-auto">
+              <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2">
+                <Pin size={14} className="text-indigo-600" />
+                Pinned Messages
+              </h4>
+              <div className="space-y-4">
+                {(activeCommunity.pinnedMessages || []).length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">No pinned messages yet. Hover over a message to pin it.</p>
+                ) : (
+                  activeCommunity.pinnedMessages.map((p: any) => (
+                    <div key={p.id} className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                      <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">{p.text}</p>
+                      <div className="mt-2 flex items-center justify-between">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">{p.senderName}</span>
+                        <button className="text-[9px] font-bold text-indigo-600 hover:underline">Jump</button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
-              <p className="text-[10px] text-slate-400 mt-1 px-1">{m.timestamp?.toDate ? format(m.timestamp.toDate(), 'HH:mm') : 'Just now'}</p>
             </div>
-          ))}
+          )}
         </div>
 
-        <div className="p-6 border-t border-slate-100 bg-white">
-          <form 
-            onSubmit={(e) => { e.preventDefault(); onSendMessage(msg); setMsg(''); }}
-            className="flex gap-3"
-          >
-            <input 
-              className="flex-1 bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all"
-              placeholder="Type your message..."
-              value={msg}
-              onChange={(e) => setMsg(e.target.value)}
-            />
-            <button className="bg-indigo-600 text-white p-4 rounded-2xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-[0.98]">
-              <Send size={20} />
-            </button>
-          </form>
-        </div>
+        {/* Add Resource Modal */}
+        <AnimatePresence>
+          {isResourceModalOpen && (
+            <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsResourceModalOpen(false)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-md bg-white rounded-[2.5rem] p-8 shadow-2xl">
+                <h3 className="text-xl font-bold mb-6">Add Resource</h3>
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const formData = new FormData(e.currentTarget);
+                  const title = formData.get('title') as string;
+                  const url = formData.get('url') as string;
+                  const type = formData.get('type') as 'link' | 'file';
+                  if (title && url) {
+                    await onAddResource(activeCommunity.id, { title, url, type });
+                    setIsResourceModalOpen(false);
+                  }
+                }} className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Title</label>
+                    <input name="title" required placeholder="e.g. Lecture Notes PDF" className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">URL</label>
+                    <input name="url" required placeholder="https://..." className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Type</label>
+                    <select name="type" className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500">
+                      <option value="link">Link</option>
+                      <option value="file">File</option>
+                    </select>
+                  </div>
+                  <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all">
+                    Share Resource
+                  </button>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+        {/* Invite Modal */}
+        <AnimatePresence>
+          {isInviteModalOpen && activeCommunity && (
+            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden"
+              >
+                <div className="p-8">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-xl font-bold text-slate-900">Invite Members</h3>
+                    <button onClick={() => setIsInviteModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                      <X size={20} className="text-slate-400" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Community Invite Code</p>
+                      <div className="flex items-center gap-2 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <span className="flex-1 font-mono font-bold text-lg text-slate-700 tracking-wider">
+                          {activeCommunity.inviteCode || 'GENERATING...'}
+                        </span>
+                        <button 
+                          onClick={() => {
+                            navigator.clipboard.writeText(activeCommunity.inviteCode || '');
+                            onConfirm("Copied!", "Invite code copied to clipboard.", () => {});
+                          }}
+                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                        >
+                          <Copy size={18} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Invite Link</p>
+                      <div className="flex items-center gap-2 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <span className="flex-1 text-xs text-slate-500 truncate">
+                          {`${window.location.origin}/join/${activeCommunity.inviteCode}`}
+                        </span>
+                        <button 
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}/join/${activeCommunity.inviteCode}`);
+                            onConfirm("Copied!", "Invite link copied to clipboard.", () => {});
+                          }}
+                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                        >
+                          <Copy size={18} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-100 flex items-start gap-3">
+                      <Info size={18} className="text-indigo-600 shrink-0 mt-0.5" />
+                      <p className="text-xs text-indigo-700 leading-relaxed">
+                        Share this code or link with your classmates. They can use the "Join" box in the Study Communities tab to join instantly.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={() => setIsInviteModalOpen(false)}
+                    className="w-full mt-8 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all"
+                  >
+                    Done
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Save Resource to Module Modal */}
+        <AnimatePresence>
+          {savingResource && (
+            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden"
+              >
+                <div className="p-8">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-xl font-bold text-slate-900">Save to Module</h3>
+                    <button onClick={() => setSavingResource(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                      <X size={20} className="text-slate-400" />
+                    </button>
+                  </div>
+
+                  <div className="mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        {savingResource.type === 'link' ? <LinkIcon size={20} /> : <FileText size={20} />}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">{savingResource.title}</p>
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">{savingResource.type}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Module</p>
+                    <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                      {modules.map((module: any) => (
+                        <button
+                          key={module.id}
+                          onClick={() => {
+                            onSaveResourceToModule(module.id, savingResource);
+                            setSavingResource(null);
+                          }}
+                          className="w-full p-4 flex items-center justify-between bg-white border border-slate-100 rounded-2xl hover:border-indigo-200 hover:bg-indigo-50/30 transition-all group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                              <BookOpen size={16} />
+                            </div>
+                            <span className="text-sm font-bold text-slate-700">{module.title}</span>
+                          </div>
+                          <ChevronRight size={16} className="text-slate-300 group-hover:text-indigo-500 transition-colors" />
+                        </button>
+                      ))}
+                      {modules.length === 0 && (
+                        <p className="text-center py-8 text-sm text-slate-400">No modules found. Create a module first.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </motion.div>
     );
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Study Communities</h2>
-        <button 
-          onClick={async () => {
-            const name = prompt("Community Name:");
-            const moduleTitle = prompt("Module/Subject Name:");
-            if (name && moduleTitle) {
-              await addDoc(collection(db, 'communities'), {
-                name,
-                moduleTitle,
-                members: [user.uid],
-                studentLevel: user.studentLevel || 'University'
-              });
-            }
-          }}
-          className="text-indigo-600 text-sm font-bold hover:underline flex items-center gap-1"
-        >
-          <Plus size={16} /> Create Community
-        </button>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Study Communities</h2>
+          <p className="text-slate-400 mt-1">Connect with students studying the same modules as you.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center bg-white border border-slate-100 rounded-2xl p-1 shadow-sm">
+            <input 
+              type="text" 
+              placeholder="Enter Code" 
+              className="bg-transparent border-none text-xs font-bold px-4 py-2 w-24 focus:ring-0"
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value)}
+            />
+            <button 
+              onClick={handleJoinByCode}
+              disabled={isJoining || !joinCode.trim()}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all disabled:opacity-50"
+            >
+              {isJoining ? 'Joining...' : 'Join'}
+            </button>
+          </div>
+          <button 
+            onClick={() => setIsCreateModalOpen(true)}
+            className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 active:scale-95"
+          >
+            <Plus size={20} />
+            Create Community
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {communities.map((c: any) => (
-          <div key={c.id} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-all group">
-            <div className="flex justify-between items-start mb-4">
-              <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
-                <Users size={24} />
-              </div>
-              <span className="text-[10px] font-bold bg-slate-50 text-slate-400 px-2 py-1 rounded-full uppercase tracking-wider">
-                {c.members?.length || 0} Members
-              </span>
-            </div>
-            <h3 className="font-bold text-lg mb-1">{c.name}</h3>
-            <p className="text-sm text-slate-400 mb-6">{c.moduleTitle}</p>
-            
-            {c.members?.includes(user.uid) ? (
-              <button 
-                onClick={() => setActiveCommunity(c)}
-                className="w-full flex items-center justify-center gap-2 bg-slate-50 text-slate-600 py-3 rounded-xl font-bold text-sm hover:bg-indigo-50 hover:text-indigo-600 transition-all"
-              >
-                <MessageSquare size={16} />
-                Open Chat
-              </button>
-            ) : (
-              <button 
-                onClick={() => onJoin(c.id)}
-                className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all"
-              >
-                Join Community
-              </button>
-            )}
-          </div>
-        ))}
+      {/* Search & Filter Bar */}
+      <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex-1 relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+          <input 
+            type="text"
+            placeholder="Search by community name or module..."
+            className="w-full bg-white border border-slate-100 rounded-2xl pl-12 pr-5 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
+          {CATEGORIES.map(cat => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`px-5 py-3 rounded-2xl text-xs font-bold whitespace-nowrap transition-all border ${
+                selectedCategory === cat 
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100' 
+                  : 'bg-white text-slate-500 border-slate-100 hover:border-indigo-200'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {/* Communities Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredCommunities.length === 0 ? (
+          <div className="col-span-full py-20 text-center bg-white rounded-[3rem] border border-dashed border-slate-200">
+            <Users size={48} className="mx-auto text-slate-200 mb-4" />
+            <h3 className="text-lg font-bold text-slate-400">No communities found</h3>
+            <p className="text-sm text-slate-300 mt-2">Try adjusting your search or create a new community!</p>
+          </div>
+        ) : (
+          filteredCommunities.map((c: any) => (
+            <motion.div 
+              key={c.id} 
+              whileHover={{ y: -5 }}
+              className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-indigo-500/5 transition-all group flex flex-col h-full"
+            >
+              <div className="flex justify-between items-start mb-6">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg ${c.avatarColor || 'bg-indigo-600'}`}>
+                  <Users size={28} />
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <span className="text-[10px] font-bold bg-slate-50 text-slate-400 px-3 py-1.5 rounded-full uppercase tracking-widest border border-slate-100">
+                    {c.members?.length || 0} Members
+                  </span>
+                  {c.category && (
+                    <span className="text-[9px] font-bold bg-indigo-50 text-indigo-600 px-2 py-1 rounded-lg uppercase tracking-wider">
+                      {c.category}
+                    </span>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex-1">
+                <h3 className="font-bold text-xl mb-2 group-hover:text-indigo-600 transition-colors">{c.name}</h3>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">{c.moduleTitle}</p>
+                {c.description && (
+                  <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed mb-6 italic">
+                    "{c.description}"
+                  </p>
+                )}
+              </div>
+              
+              <div className="mt-auto">
+                {c.members?.includes(user.uid) ? (
+                  <button 
+                    onClick={() => setActiveCommunity(c)}
+                    className="w-full flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 py-4 rounded-2xl font-bold text-sm hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+                  >
+                    <MessageSquare size={18} />
+                    Open Chat
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => onJoin(c.id)}
+                    className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-[0.98]"
+                  >
+                    Join Community
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          ))
+        )}
+      </div>
+
+      {/* Create Community Modal */}
+      <AnimatePresence>
+        {isCreateModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsCreateModalOpen(false)}
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-xl bg-white rounded-[3rem] shadow-2xl overflow-hidden"
+            >
+              <div className="p-10">
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-2xl font-bold">Create New Community</h2>
+                  <button onClick={() => setIsCreateModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-all">
+                    <X size={24} />
+                  </button>
+                </div>
+
+                <form 
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const formData = new FormData(e.currentTarget);
+                    const name = formData.get('name') as string;
+                    const moduleTitle = formData.get('moduleTitle') as string;
+                    const description = formData.get('description') as string;
+                    const category = formData.get('category') as string;
+                    
+                    const colors = ['bg-indigo-600', 'bg-emerald-500', 'bg-rose-500', 'bg-amber-500', 'bg-sky-500', 'bg-violet-500'];
+                    const avatarColor = colors[Math.floor(Math.random() * colors.length)];
+                    const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+                    if (name && moduleTitle) {
+                      await addDoc(collection(db, 'communities'), {
+                        name,
+                        moduleTitle,
+                        description,
+                        category,
+                        avatarColor,
+                        inviteCode,
+                        members: [user.uid],
+                        studentLevel: profile?.studentLevel || 'University',
+                        pinnedMessages: [],
+                        resources: [],
+                        createdAt: serverTimestamp()
+                      });
+                      setIsCreateModalOpen(false);
+                    }
+                  }}
+                  className="space-y-6"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase tracking-widest text-slate-400">Community Name</label>
+                      <input 
+                        name="name"
+                        required
+                        placeholder="e.g. Physics 101 Study Group"
+                        className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase tracking-widest text-slate-400">Module / Subject</label>
+                      <input 
+                        name="moduleTitle"
+                        required
+                        placeholder="e.g. PHY101"
+                        className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-slate-400">Category</label>
+                    <select 
+                      name="category"
+                      className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all"
+                    >
+                      {CATEGORIES.filter(c => c !== 'All').map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-slate-400">Description (Optional)</label>
+                    <textarea 
+                      name="description"
+                      rows={3}
+                      placeholder="What is this community about?"
+                      className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all resize-none"
+                    />
+                  </div>
+
+                  <button 
+                    type="submit"
+                    className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-[0.98]"
+                  >
+                    Create Community
+                  </button>
+                </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -1813,20 +2695,34 @@ function HomeworkSolverView({ profile, module, onUpdate }: { profile: UserProfil
         promptText += `\n\nData from Excel: ${JSON.stringify(data.excelData)}`;
       }
 
-      parts.push({ text: `You are an expert tutor. Solve the following homework problem for a ${profile.studentLevel} student. Provide a clear, step-by-step explanation. 
-${module ? `Context: This is for the module "${module.title}".` : ''}
-${module?.notes ? `Module Notes: ${module.notes.substring(0, 5000)}` : ''}
-Problem: ${promptText || 'Please solve the problem in the attached image.'}` });
+      if (!promptText && !data.image) {
+        throw new Error("Please provide a problem description or an image.");
+      }
+
+      parts.push({ text: `You are an expert tutor. Solve the following homework problem for a ${profile.studentLevel} student named ${profile.firstName}. 
+        Provide a clear, step-by-step explanation that aligns with their current academic level.
+        
+        ${module ? `Context: This is for the module "${module.title}". 
+        - Module Type: ${module.moduleType}
+        - Current Mastery: ${module.masteryScore || 0}%
+        ${module.learningOutcomes?.length ? `- Learning Outcomes to focus on: ${module.learningOutcomes.join(', ')}` : ''}` : ''}
+        ${module?.notes ? `Module Notes: ${module.notes.substring(0, 5000)}` : ''}
+        
+        Problem: ${promptText || 'Please solve the problem in the attached image.'}` });
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: { parts },
       });
 
+      if (!response.text) {
+        throw new Error("The AI was unable to generate a solution. Please try rephrasing your problem or providing more context.");
+      }
+
       const newSolution = {
         id: Math.random().toString(36).substr(2, 9),
         question: data.text || 'Image/File based problem',
-        solution: response.text || '',
+        solution: response.text,
         timestamp: new Date()
       };
 
@@ -1835,8 +2731,8 @@ Problem: ${promptText || 'Please solve the problem in the attached image.'}` });
         onUpdate({ homeworkSolutions: updatedSolutions });
       }
     } catch (err: any) {
-      console.error(err);
-      setError("Failed to solve homework. Please try again.");
+      console.error("Homework Solver Error:", err);
+      setError(err.message || 'An unexpected error occurred while solving the problem. Please try again.');
     } finally {
       setIsSolving(false);
     }
@@ -1870,6 +2766,15 @@ Problem: ${promptText || 'Please solve the problem in the attached image.'}` });
         <h2 className="text-2xl font-bold mb-2">Homework Solver</h2>
         <p className="text-slate-400 mb-8">Upload documents, photos, Excel files or type your problem to get a step-by-step solution.</p>
         
+        {error && (
+          <div className="mb-6">
+            <AIErrorMessage 
+              message={error} 
+              onRetry={() => setError('')} 
+            />
+          </div>
+        )}
+        
         <UniversalInput 
           onProcess={solveHomework} 
           isProcessing={isSolving} 
@@ -1877,12 +2782,6 @@ Problem: ${promptText || 'Please solve the problem in the attached image.'}` });
           buttonLabel={isSolving ? "Solving..." : "Solve Problem"}
         />
       </div>
-
-      {error && (
-        <div className="bg-red-50 text-red-600 p-4 rounded-2xl border border-red-100 text-sm font-medium">
-          {error}
-        </div>
-      )}
 
       <div className="space-y-6">
         {module?.homeworkSolutions?.map((item) => (
@@ -1971,6 +2870,10 @@ function DiagramGeneratorView({ profile, module, onUpdate }: { profile: UserProf
     setError('');
 
     try {
+      if (!data.text && !data.image && (!data.excelData || data.excelData.length === 0)) {
+        throw new Error("Please provide some content to generate a diagram from.");
+      }
+
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const parts: any[] = [];
       
@@ -1989,20 +2892,28 @@ function DiagramGeneratorView({ profile, module, onUpdate }: { profile: UserProf
         promptText += `\n\nData from Excel: ${JSON.stringify(data.excelData)}`;
       }
 
-      parts.push({ text: `You are a diagram expert. Create a visually appealing Mermaid.js diagram based on this description for a ${profile.studentLevel} student: "${promptText}". 
-${module ? `Context: This is for the module "${module.title}".` : ''}
-${module?.notes ? `Module Notes Context: ${module.notes.substring(0, 5000)}` : ''}
-
-Requirements:
-1. Use the most appropriate Mermaid diagram type (graph TD/LR, sequenceDiagram, classDiagram, stateDiagram-v2, gantt, pie, etc.).
-2. Add COLOUR and STYLING to the diagram using Mermaid's "style" or "classDef" commands to make it visually engaging and help distinguish different parts of the process/structure.
-3. Use clear labels and logical flow.
-4. Return ONLY the raw Mermaid code. Do not include markdown code blocks (like \`\`\`mermaid). Just the code itself.` });
+      parts.push({ text: `You are a diagram expert. Create a visually appealing Mermaid.js diagram based on this description for a ${profile.studentLevel} student named ${profile.firstName}: "${promptText}". 
+        
+        ${module ? `Context: This is for the module "${module.title}".
+        - Module Type: ${module.moduleType}
+        - Current Mastery: ${module.masteryScore || 0}%
+        ${module.learningOutcomes?.length ? `- Learning Outcomes to focus on: ${module.learningOutcomes.join(', ')}` : ''}` : ''}
+        ${module?.notes ? `Module Notes Context: ${module.notes.substring(0, 5000)}` : ''}
+        
+        Requirements:
+        1. Use the most appropriate Mermaid diagram type (graph TD/LR, sequenceDiagram, classDiagram, stateDiagram-v2, gantt, pie, etc.).
+        2. Add COLOUR and STYLING to the diagram using Mermaid's "style" or "classDef" commands to make it visually engaging and help distinguish different parts of the process/structure.
+        3. Use clear labels and logical flow.
+        4. Return ONLY the raw Mermaid code. Do not include markdown code blocks (like \`\`\`mermaid). Just the code itself.` });
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: { parts },
       });
+
+      if (!response.text) {
+        throw new Error("AI failed to generate a diagram. Please try again.");
+      }
 
       let code = response.text || '';
       code = code.replace(/```mermaid/g, '').replace(/```/g, '').trim();
@@ -2019,8 +2930,8 @@ Requirements:
         onUpdate({ diagrams: updatedDiagrams });
       }
     } catch (err: any) {
-      console.error(err);
-      setError("Failed to generate diagram. Please try again.");
+      console.error('Error generating diagram:', err);
+      setError(err.message || 'Failed to generate diagram. Please try again.');
     } finally {
       setIsGenerating(false);
     }
@@ -2053,6 +2964,15 @@ Requirements:
       <div className="bg-white rounded-[2.5rem] p-10 border border-slate-100 shadow-sm">
         <h2 className="text-2xl font-bold mb-2">AI Diagram Generator</h2>
         <p className="text-slate-400 mb-8">Describe a process, system, or flow to generate a visual diagram automatically.</p>
+        
+        {error && (
+          <div className="mb-6">
+            <AIErrorMessage 
+              message={error} 
+              onRetry={() => setError('')} 
+            />
+          </div>
+        )}
         
         <UniversalInput 
           onProcess={generateDiagram} 
@@ -2142,6 +3062,10 @@ function MindMapCreatorView({ profile, module, onUpdate }: { profile: UserProfil
     setError('');
 
     try {
+      if (!data.text && !data.image && (!data.excelData || data.excelData.length === 0)) {
+        throw new Error("Please provide some content to generate a mind map from.");
+      }
+
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const parts: any[] = [];
       
@@ -2160,20 +3084,28 @@ function MindMapCreatorView({ profile, module, onUpdate }: { profile: UserProfil
         promptText += `\n\nData from Excel: ${JSON.stringify(data.excelData)}`;
       }
 
-      parts.push({ text: `You are a mind map expert. Create a visually appealing and comprehensive Mermaid.js mindmap based on this topic for a ${profile.studentLevel} student: "${promptText}". 
-${module ? `Context: This is for the module "${module.title}".` : ''}
-${module?.notes ? `Module Notes Context: ${module.notes.substring(0, 5000)}` : ''}
-
-Requirements:
-1. Use the "mindmap" Mermaid type.
-2. Add COLOUR and STYLING to the mindmap to make it visually engaging and help distinguish different branches.
-3. Use clear labels and a logical hierarchical structure.
-4. Return ONLY the raw Mermaid code. Do not include markdown code blocks (like \`\`\`mermaid). Just the code itself.` });
+      parts.push({ text: `You are a mind map expert. Create a visually appealing and comprehensive Mermaid.js mindmap based on this topic for a ${profile.studentLevel} student named ${profile.firstName}: "${promptText}". 
+        
+        ${module ? `Context: This is for the module "${module.title}".
+        - Module Type: ${module.moduleType}
+        - Current Mastery: ${module.masteryScore || 0}%
+        ${module.learningOutcomes?.length ? `- Learning Outcomes to focus on: ${module.learningOutcomes.join(', ')}` : ''}` : ''}
+        ${module?.notes ? `Module Notes Context: ${module.notes.substring(0, 5000)}` : ''}
+        
+        Requirements:
+        1. Use the "mindmap" Mermaid type.
+        2. Add COLOUR and STYLING to the mindmap to make it visually engaging and help distinguish different branches.
+        3. Use clear labels and a logical hierarchical structure.
+        4. Return ONLY the raw Mermaid code. Do not include markdown code blocks (like \`\`\`mermaid). Just the code itself.` });
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: { parts },
       });
+
+      if (!response.text) {
+        throw new Error("AI failed to generate a mind map. Please try again.");
+      }
 
       let code = response.text || '';
       code = code.replace(/```mermaid/g, '').replace(/```/g, '').trim();
@@ -2190,8 +3122,8 @@ Requirements:
         onUpdate({ mindMaps: updatedMindMaps });
       }
     } catch (err: any) {
-      console.error(err);
-      setError("Failed to generate mind map. Please try again.");
+      console.error('Error generating mind map:', err);
+      setError(err.message || 'Failed to generate mind map. Please try again.');
     } finally {
       setIsGenerating(false);
     }
@@ -2224,6 +3156,15 @@ Requirements:
       <div className="bg-white rounded-[2.5rem] p-10 border border-slate-100 shadow-sm">
         <h2 className="text-2xl font-bold mb-2">AI Mind Map Creator</h2>
         <p className="text-slate-400 mb-8">Enter a topic or upload files to generate a comprehensive mind map for study and brainstorming.</p>
+        
+        {error && (
+          <div className="mb-6">
+            <AIErrorMessage 
+              message={error} 
+              onRetry={() => setError('')} 
+            />
+          </div>
+        )}
         
         <UniversalInput 
           onProcess={generateMindMap} 
@@ -2354,7 +3295,7 @@ function TranslatorView({ module }: { module?: Module }) {
           setTranslatedText(response.text);
           return true;
         } else {
-          throw new Error("No translation generated.");
+          throw new Error("AI failed to generate a translation. Please try again with a shorter text or different settings.");
         }
       } catch (err: any) {
         const errorMsg = err?.message || String(err);
@@ -2368,7 +3309,7 @@ function TranslatorView({ module }: { module?: Module }) {
           }
           throw new Error("The translation service is currently busy due to high demand. Please try again in a few minutes.");
         }
-        throw err;
+        throw new Error(`Translation failed: ${errorMsg}. Please try again.`);
       }
     };
 
@@ -2399,6 +3340,15 @@ function TranslatorView({ module }: { module?: Module }) {
               <p className="text-xs text-slate-400 font-medium">Professional translations for your study materials</p>
             </div>
           </div>
+          
+          {error && (
+            <div className="mb-6">
+              <AIErrorMessage 
+                message={error} 
+                onRetry={() => setError(null)} 
+              />
+            </div>
+          )}
           
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
@@ -2461,9 +3411,8 @@ function TranslatorView({ module }: { module?: Module }) {
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-2xl text-sm font-medium flex items-center gap-2 border border-red-100">
-            <AlertCircle size={16} />
-            {error}
+          <div className="mb-6">
+            <AIErrorMessage message={error} onRetry={handleTranslate} />
           </div>
         )}
 
@@ -2790,25 +3739,54 @@ function AIChatView({ profile, modules, schedule, module }: { profile: UserProfi
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
-      const modulesContext = modules.map(m => `- ${m.title} (${m.moduleType}): ${m.units?.length || 0} units`).join('\n');
-      const scheduleContext = schedule.slice(0, 5).map(s => `- ${s.title} on ${format(s.start, 'MMM d, HH:mm')}`).join('\n');
+      const now = new Date();
+      const modulesContext = modules.map(m => {
+        const assessments = m.assessments?.map((a: any) => `- ${a.title} (Due: ${a.dueDate}, Weight: ${a.weight}%, Status: ${a.status || 'Pending'}${a.markReceived ? `, Mark: ${a.markReceived}%` : ''})`).join('\n  ');
+        const outcomes = m.learningOutcomes?.map(o => `- ${o}`).join('\n  ') || 'None identified';
+        return `- ${m.title} (${m.moduleType}): ${m.units?.length || 0} units, Mastery: ${m.masteryScore || 0}%\n  Assessments:\n  ${assessments || 'None'}\n  Learning Outcomes:\n  ${outcomes}`;
+      }).join('\n');
+      
+      const scheduleContext = schedule
+        .filter((s: any) => isAfter(s.start, now))
+        .slice(0, 10)
+        .map(s => `- ${s.title} (${s.type}): ${format(s.start, 'EEEE, MMM d, HH:mm')} to ${format(s.end, 'HH:mm')}`)
+        .join('\n');
+
+      const studyPrefs = profile.studyPreferences ? `
+      - Preferred Hours: ${profile.studyPreferences.preferredStartTime} to ${profile.studyPreferences.preferredEndTime}
+      - Session Duration: ${profile.studyPreferences.sessionDuration} minutes
+      - Break Duration: ${profile.studyPreferences.breakDuration} minutes
+      ` : 'Not set';
+
+      const availability = profile.availability?.filter(a => a.enabled).map(a => `- ${a.day}: ${a.startTime} - ${a.endTime}`).join('\n') || 'Not set';
 
       const contents: any[] = [
-        { role: 'user', parts: [{ text: `You are StudyFlow AI, a helpful and encouraging academic assistant for a ${profile.studentLevel} student named ${profile.firstName}.
+        { role: 'user', parts: [{ text: `You are Pfunzo AI (formerly StudyFlow AI), a highly context-aware, helpful, and encouraging academic assistant for a ${profile.studentLevel} student named ${profile.firstName}.
           Your goal is to help them with study materials, explain complex topics, and assist with academic planning.
+          
+          CURRENT TIME: ${format(now, 'EEEE, MMMM d, yyyy, HH:mm')}
           
           ${module ? `CURRENT FOCUS: You are currently assisting the student with the module "${module.title}".` : ''}
           ${module?.notes ? `MODULE NOTES: ${module.notes.substring(0, 5000)}` : ''}
 
+          Student Learning Preferences:
+          ${studyPrefs}
+          
+          Weekly Availability:
+          ${availability}
+
           Current Student Context:
           - Level: ${profile.studentLevel}
           - Institution: ${profile.institution}
-          - Modules:
+          - Modules & Assessments:
           ${modulesContext || 'No modules added yet.'}
-          - Upcoming Schedule:
+          - Upcoming Schedule (Next 10 sessions):
           ${scheduleContext || 'No upcoming sessions.'}
           
-          Be concise, accurate, and supportive. Use markdown for formatting.` }] }
+          Guidelines:
+          1. Use the student's schedule and preferences to give better advice. For example, if they have a deadline coming up, remind them or suggest study blocks.
+          2. If they ask about their progress, refer to their modules and assessments.
+          3. Be concise, accurate, and supportive. Use markdown for formatting.` }] }
       ];
 
       // Add history
@@ -2839,11 +3817,15 @@ function AIChatView({ profile, modules, schedule, module }: { profile: UserProfi
         contents: contents
       });
 
-      const modelResponse = response.text || "I'm sorry, I couldn't process that.";
+      if (!response.text) {
+        throw new Error("I'm sorry, I couldn't process that. Please try rephrasing your question or providing more context.");
+      }
+
+      const modelResponse = response.text;
       setMessages(prev => [...prev, { role: 'model', text: modelResponse }]);
-    } catch (err) {
-      console.error(err);
-      setMessages(prev => [...prev, { role: 'model', text: "Sorry, I encountered an error. Please try again." }]);
+    } catch (err: any) {
+      console.error("AI Chat Error:", err);
+      setMessages(prev => [...prev, { role: 'model', text: `Sorry, I encountered an error: ${err.message || "Please check your connection and try again."}` }]);
     } finally {
       setIsLoading(false);
     }
@@ -2975,17 +3957,117 @@ function SidebarItem({ active, onClick, icon, label, count, isSubItem }: any) {
   );
 }
 
-function ModuleQuiz({ module, onUpdate }: { module: Module, onUpdate: (updates: Partial<Module>) => void }) {
+function InteractiveExplanation({ explanation, keyConcepts, moduleId, moduleTitle }: { explanation: string, keyConcepts?: string[], moduleId: string, moduleTitle: string }) {
+  const [deepDive, setDeepDive] = useState<{ concept: string; explanation: string } | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleDeepDive = async (concept: string) => {
+    setIsLoading(true);
+    setDeepDive(null);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Explain the concept of "${concept}" in detail, specifically in the context of the module "${moduleTitle}". 
+        Provide:
+        1. A clear, academic definition.
+        2. 2-3 practical examples.
+        3. Why this concept is important for this module.
+        Use markdown for formatting.`,
+      });
+      setDeepDive({ concept, explanation: response.text || "No further information available." });
+    } catch (error) {
+      console.error("Deep dive error:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!keyConcepts || keyConcepts.length === 0) {
+    return <p className="text-sm text-indigo-900/80">{explanation}</p>;
+  }
+
+  // Sort concepts by length descending to match longest ones first
+  const sortedConcepts = [...keyConcepts].sort((a, b) => b.length - a.length);
+  // Escape regex special characters
+  const escapedConcepts = sortedConcepts.map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const regex = new RegExp(`(${escapedConcepts.join('|')})`, 'gi');
+  const parts = explanation.split(regex);
+
+  return (
+    <div className="relative">
+      <p className="text-sm text-indigo-900/80 leading-relaxed">
+        {parts.map((part, i) => {
+          const isConcept = keyConcepts.some(c => c.toLowerCase() === part.toLowerCase());
+          if (isConcept) {
+            return (
+              <button
+                key={i}
+                onClick={() => handleDeepDive(part)}
+                className="text-indigo-600 font-bold underline decoration-indigo-300 hover:decoration-indigo-600 transition-all px-0.5"
+              >
+                {part}
+              </button>
+            );
+          }
+          return part;
+        })}
+      </p>
+
+      <AnimatePresence>
+        {(isLoading || deepDive) && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="mt-4 p-4 bg-white rounded-2xl border border-indigo-100 shadow-lg z-10"
+          >
+            <div className="flex justify-between items-center mb-2">
+              <h6 className="font-bold text-indigo-900 flex items-center gap-2">
+                <Search size={14} />
+                Deep Dive: {deepDive?.concept || 'Analyzing...'}
+              </h6>
+              <button onClick={() => setDeepDive(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={16} />
+              </button>
+            </div>
+            {isLoading ? (
+              <div className="flex items-center gap-2 text-xs text-slate-400 py-4">
+                <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                Diving deeper into the concept...
+              </div>
+            ) : (
+              <div className="text-xs text-slate-600 prose prose-sm max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                <Markdown>{deepDive?.explanation}</Markdown>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function ModuleQuiz({ module, onUpdate, selectedUnitId }: { module: Module, onUpdate: (updates: Partial<Module>) => void, selectedUnitId?: string | null }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
   const [score, setScore] = useState(0);
   const [quizComplete, setQuizComplete] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const selectedUnit = module.units?.find(u => u.id === selectedUnitId);
+  const currentQuiz = selectedUnit ? selectedUnit.quiz : module.quiz;
 
   const generateQuiz = async (data: { text: string; image?: string; excelData?: any[] }) => {
     setIsGenerating(true);
+    setError(null);
     try {
+      if (!data.text && !data.image && (!data.excelData || data.excelData.length === 0)) {
+        throw new Error("Please provide some content to generate a quiz from.");
+      }
+
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
       let contextText = data.text;
@@ -2993,19 +4075,30 @@ function ModuleQuiz({ module, onUpdate }: { module: Module, onUpdate: (updates: 
         contextText += `\n\nData from Excel: ${JSON.stringify(data.excelData)}`;
       }
 
+      const unitContext = selectedUnit ? `specifically for Unit ${selectedUnit.unitNumber}: "${selectedUnit.name}"` : '';
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: `Generate a 5-question multiple choice quiz from the following content for the module "${module.title}". 
+        contents: `Generate a 5-question multiple choice quiz from the following content for the module "${module.title}" ${unitContext}. 
         Each question should have 4 options and one correct answer. 
-        Include a brief explanation for the correct answer.
-        Return the result as a JSON array of objects with "question", "options" (array of strings), "correctAnswer" (index 0-3), and "explanation" properties.
+        Include a detailed, educational explanation for the correct answer.
+        Also, identify 2-4 "keyConcepts" (short phrases or terms) that appear in the explanation which are central to understanding the answer.
+        Return the result as a JSON array of objects with "question", "options" (array of strings), "correctAnswer" (index 0-3), "explanation" (string), and "keyConcepts" (array of strings) properties.
         
         Content:
         ${contextText}
         ${module.notes ? `Module Notes Context: ${module.notes.substring(0, 5000)}` : ''}`,
         config: { responseMimeType: "application/json" }
       });
+
+      if (!response.text) {
+        throw new Error("AI failed to generate a quiz. Please try again.");
+      }
+
       const questions = JSON.parse(response.text);
+      if (!Array.isArray(questions) || questions.length === 0) {
+        throw new Error("AI failed to generate valid quiz questions. Please try again.");
+      }
+
       onUpdate({ 
         quiz: { 
           id: Math.random().toString(36).substr(2, 9), 
@@ -3017,57 +4110,67 @@ function ModuleQuiz({ module, onUpdate }: { module: Module, onUpdate: (updates: 
       setScore(0);
       setIsAnswered(false);
       setSelectedOption(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating quiz:', error);
+      setError(error.message || 'An unexpected error occurred while generating your quiz. Please try again.');
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleOptionSelect = (idx: number) => {
-    if (isAnswered) return;
+    if (isAnswered || !currentQuiz) return;
     setSelectedOption(idx);
     setIsAnswered(true);
-    if (idx === module.quiz?.questions[currentQuestionIdx].correctAnswer) {
+    if (idx === currentQuiz.questions[currentQuestionIdx].correctAnswer) {
       setScore(s => s + 1);
     }
   };
 
   const nextQuestion = () => {
-    if (currentQuestionIdx < (module.quiz?.questions.length || 0) - 1) {
+    if (!currentQuiz) return;
+    if (currentQuestionIdx < currentQuiz.questions.length - 1) {
       setCurrentQuestionIdx(prev => prev + 1);
       setIsAnswered(false);
       setSelectedOption(null);
     } else {
       setQuizComplete(true);
-      const finalScore = Math.round(((score + (selectedOption === module.quiz?.questions[currentQuestionIdx].correctAnswer ? 1 : 0)) / (module.quiz?.questions.length || 1)) * 100);
+      const finalScore = Math.round(((score + (selectedOption === currentQuiz.questions[currentQuestionIdx].correctAnswer ? 1 : 0)) / currentQuiz.questions.length) * 100);
       onUpdate({ 
-        quiz: { ...module.quiz!, lastScore: finalScore, completedAt: new Date() },
+        quiz: { ...currentQuiz, lastScore: finalScore, completedAt: new Date() },
         masteryScore: Math.round((finalScore + (module.masteryScore || 0)) / 2) // Simple mastery update
       });
     }
   };
 
-  if (!module.quiz) {
+  if (!currentQuiz) {
     return (
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-10">
         <div className="text-center mb-8">
           <HelpCircle size={48} className="mx-auto text-indigo-200 mb-4" />
-          <h5 className="text-xl font-bold text-slate-800 mb-2">Knowledge Check</h5>
-          <p className="text-slate-500 max-w-md mx-auto">Generate a custom quiz based on your notes or uploaded material to test your understanding.</p>
+          <h5 className="text-xl font-bold text-slate-800 mb-2">
+            {selectedUnit ? `Unit ${selectedUnit.unitNumber} Knowledge Check` : 'Knowledge Check'}
+          </h5>
+          <p className="text-slate-500 max-w-md mx-auto">
+            {selectedUnit 
+              ? `Generate a custom quiz for Unit ${selectedUnit.unitNumber} to test your understanding of this specific topic.`
+              : 'Generate a custom quiz based on your notes or uploaded material to test your understanding.'}
+          </p>
         </div>
         
+        {error && <AIErrorMessage message={error} onRetry={() => generateQuiz({ text: '' })} />}
+
         <UniversalInput 
           onProcess={generateQuiz} 
           isProcessing={isGenerating} 
-          placeholder="What should the quiz cover? Paste text or upload files..."
+          placeholder={selectedUnit ? `What should the Unit ${selectedUnit.unitNumber} quiz cover?` : "What should the quiz cover? Paste text or upload files..."}
           buttonLabel={isGenerating ? "Generating Quiz..." : "Generate Quiz"}
         />
       </div>
     );
   }
 
-  const currentQuestion = module.quiz.questions[currentQuestionIdx];
+  const currentQuestion = currentQuiz.questions[currentQuestionIdx];
 
   return (
     <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
@@ -3077,8 +4180,10 @@ function ModuleQuiz({ module, onUpdate }: { module: Module, onUpdate: (updates: 
             <HelpCircle size={20} />
           </div>
           <div>
-            <h5 className="font-bold text-slate-800">Module Quiz</h5>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Question {currentQuestionIdx + 1} of {module.quiz.questions.length}</p>
+            <h5 className="font-bold text-slate-800">
+              {selectedUnit ? `Unit ${selectedUnit.unitNumber} Quiz` : 'Module Quiz'}
+            </h5>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Question {currentQuestionIdx + 1} of {currentQuiz.questions.length}</p>
           </div>
         </div>
         <button 
@@ -3096,7 +4201,7 @@ function ModuleQuiz({ module, onUpdate }: { module: Module, onUpdate: (updates: 
               <Award size={40} />
             </div>
             <h6 className="text-2xl font-bold text-slate-800 mb-1">Quiz Complete!</h6>
-            <p className="text-slate-500 mb-6">You scored {module.quiz.lastScore}%</p>
+            <p className="text-slate-500 mb-6">You scored {currentQuiz.lastScore}%</p>
             <div className="flex justify-center gap-4">
               <button 
                 onClick={() => generateQuiz({ text: '' })}
@@ -3151,7 +4256,12 @@ function ModuleQuiz({ module, onUpdate }: { module: Module, onUpdate: (updates: 
                       <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Explanation</p>
                       <SpeechButton text={currentQuestion.explanation} className="!bg-transparent !p-0 !shadow-none !border-none !text-indigo-300 hover:!text-indigo-600" />
                     </div>
-                    <p className="text-sm text-indigo-900/80">{currentQuestion.explanation}</p>
+                    <InteractiveExplanation 
+                      explanation={currentQuestion.explanation} 
+                      keyConcepts={currentQuestion.keyConcepts}
+                      moduleId={module.id}
+                      moduleTitle={module.title}
+                    />
                   </div>
                   <button 
                     onClick={nextQuestion}
@@ -3169,7 +4279,9 @@ function ModuleQuiz({ module, onUpdate }: { module: Module, onUpdate: (updates: 
   );
 }
 
-function ModuleChatbot({ module, onUpdate, onConfirm }: { 
+function ModuleChatbot({ profile, schedule, module, onUpdate, onConfirm }: { 
+  profile: UserProfile,
+  schedule: ScheduleItem[],
   module: Module, 
   onUpdate: (updates: Partial<Module>) => void,
   onConfirm: (title: string, message: string, onConfirm: () => void) => void
@@ -3249,15 +4361,42 @@ function ModuleChatbot({ module, onUpdate, onConfirm }: {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
-      let systemInstruction = `You are a specialized study assistant for the module "${module.title}". 
+      const now = new Date();
+      const studyPrefs = profile.studyPreferences ? `
+      - Preferred Hours: ${profile.studyPreferences.preferredStartTime} to ${profile.studyPreferences.preferredEndTime}
+      - Session Duration: ${profile.studyPreferences.sessionDuration} minutes
+      - Break Duration: ${profile.studyPreferences.breakDuration} minutes
+      ` : 'Not set';
+
+      const availability = profile.availability?.filter(a => a.enabled).map(a => `- ${a.day}: ${a.startTime} - ${a.endTime}`).join('\n') || 'Not set';
+
+      const upcomingForModule = schedule
+        .filter(s => s.moduleId === module.id && isAfter(s.start, now))
+        .slice(0, 5)
+        .map(s => `- ${s.title}: ${format(s.start, 'MMM d, HH:mm')}`)
+        .join('\n');
+
+      let systemInstruction = `You are Pfunzo AI (formerly StudyFlow AI), a specialized study assistant for the module "${module.title}". 
       Your goal is to help the student understand the material, answer questions, and provide explanations based on the provided module content.
       
+      CURRENT TIME: ${format(now, 'EEEE, MMMM d, yyyy, HH:mm')}
+
+      Student Context:
+      - Name: ${profile.firstName}
+      - Level: ${profile.studentLevel}
+      - Learning Preferences: ${studyPrefs}
+      - Availability: ${availability}
+      - Upcoming Sessions for this Module:
+      ${upcomingForModule || 'No upcoming sessions scheduled for this module.'}
+
       Module Context:
       - Title: ${module.title}
       - Type: ${module.moduleType}
+      - Mastery Score: ${module.masteryScore || 0}%
       ${module.summary ? `- Summary: ${module.summary.substring(0, 2000)}` : ''}
       ${module.units?.length ? `- Units: ${module.units.map(u => `${u.unitNumber}: ${u.name}`).join(', ')}` : ''}
-      ${module.assessments?.length ? `- Assessments: ${module.assessments.map(a => `${a.title} (Due: ${a.dueDate}${a.dueTime ? ' @ ' + a.dueTime : ''})`).join(', ')}` : ''}
+      ${module.assessments?.length ? `- Assessments: ${module.assessments.map(a => `${a.title} (Due: ${a.dueDate}${a.dueTime ? ' @ ' + a.dueTime : ''}, Status: ${a.status || 'Pending'}${a.markReceived ? `, Mark: ${a.markReceived}%` : ''})`).join(', ')}` : ''}
+      ${module.learningOutcomes?.length ? `- Learning Outcomes: ${module.learningOutcomes.join(', ')}` : ''}
       
       Primary Source Material (Notes):
       ${module.notes?.substring(0, 15000) || 'No notes available.'}
@@ -3265,18 +4404,29 @@ function ModuleChatbot({ module, onUpdate, onConfirm }: {
       Guidelines:
       1. Always prioritize the provided notes and module context when answering.
       2. If the answer is not in the notes, use your general knowledge but mention that it's not explicitly in the module materials.
-      3. Be concise, encouraging, and academic in tone.
-      4. Use markdown for formatting (bolding, lists, code blocks).
-      5. If images are provided, analyze them in the context of the module.`;
+      3. Use the student's learning preferences and upcoming schedule to provide tailored advice (e.g., suggesting when to study next).
+      4. Be concise, encouraging, and academic in tone.
+      5. Use markdown for formatting (bolding, lists, code blocks).
+      6. If images are provided, analyze them in the context of the module.`;
 
       if (isLanguageModule(module)) {
-        systemInstruction = `You are an advanced South African language AI Tutor and Study Assistant for the module "${module.title}". 
+        systemInstruction = `You are Pfunzo AI (formerly StudyFlow AI), an advanced South African language AI Tutor and Study Assistant for the module "${module.title}". 
         You help students learn South African languages from beginner level (age 3) to university level.
+
+        CURRENT TIME: ${format(now, 'EEEE, MMMM d, yyyy, HH:mm')}
+
+        Student Context:
+        - Name: ${profile.firstName}
+        - Level: ${profile.studentLevel}
+        - Learning Preferences: ${studyPrefs}
+        - Upcoming Sessions for this Module:
+        ${upcomingForModule || 'No upcoming sessions scheduled for this module.'}
 
         Your role combines:
         • South African language teacher
         • Pronunciation coach
         • Study tutor
+        • Academic assistant
         • Academic assistant
 
         You must teach in a clear, patient, and structured way similar to a real teacher.
@@ -3337,16 +4487,27 @@ function ModuleChatbot({ module, onUpdate, onConfirm }: {
         }
       });
 
+      if (!response.text) {
+        throw new Error("I'm sorry, I couldn't process that. Please try rephrasing your question or providing more context.");
+      }
+
       const aiMsg: ModuleChatMessage = {
         id: Math.random().toString(36).substr(2, 9),
         role: 'model',
-        text: response.text || "I'm sorry, I couldn't process that.",
+        text: response.text,
         timestamp: new Date()
       };
 
       onUpdate({ chatHistory: [...newHistory, aiMsg] });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Chat error:', error);
+      const errorMsg: ModuleChatMessage = {
+        id: Math.random().toString(36).substr(2, 9),
+        role: 'model',
+        text: `I'm sorry, I encountered an error: ${error.message || "Please check your connection and try again."}. If the problem persists, try refreshing the page.`,
+        timestamp: new Date()
+      };
+      onUpdate({ chatHistory: [...newHistory, errorMsg] });
     } finally {
       setIsTyping(false);
     }
@@ -3461,6 +4622,184 @@ function ModuleChatbot({ module, onUpdate, onConfirm }: {
             <Send size={20} />
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AIStudyAssistant({ profile, module, onUpdate, onConfirm }: {
+  profile: UserProfile;
+  module: Module;
+  onUpdate: (updates: Partial<Module>) => void;
+  onConfirm: (title: string, message: string, onConfirm: () => void) => void;
+}) {
+  const [messages, setMessages] = useState<{ role: 'user' | 'model'; text: string; type?: 'explanation' | 'quiz' | 'tip' }[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const generateResponse = async (prompt: string, type?: 'explanation' | 'quiz' | 'tip') => {
+    setIsLoading(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      
+      const systemInstruction = `You are an expert AI Study Assistant for the module "${module.title}".
+      Student Profile: ${profile.firstName} ${profile.lastName}, Level: ${profile.studentLevel}, Grade: ${profile.yearGrade}.
+      
+      Your goals:
+      1. Provide clear, academic explanations of complex concepts.
+      2. Generate interactive quizzes to test knowledge.
+      3. Offer personalized study tips based on the student's context.
+      
+      Context from module:
+      ${module.notes ? `Module Notes: ${module.notes.substring(0, 2000)}` : 'No notes provided yet.'}
+      ${module.units?.map(u => `Unit ${u.unitNumber}: ${u.name}`).join('\n')}
+      
+      Always be encouraging, academic yet accessible, and focused on the learning outcomes.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: { systemInstruction }
+      });
+
+      const text = response.text || "I'm sorry, I couldn't process that request.";
+      setMessages(prev => [...prev, { role: 'model', text, type }]);
+    } catch (error) {
+      console.error('AI Assistant Error:', error);
+      setMessages(prev => [...prev, { role: 'model', text: "I encountered an error while trying to help. Please try again." }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSend = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!input.trim() || isLoading) return;
+
+    const userMsg = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    await generateResponse(userMsg);
+  };
+
+  const quickActions = [
+    { label: 'Explain a Concept', icon: <BookOpen size={14} />, prompt: 'Can you explain a key concept from this module in simple terms?', type: 'explanation' as const },
+    { label: 'Quick Quiz', icon: <HelpCircle size={14} />, prompt: 'Generate a 5-question multiple choice quiz based on the module content.', type: 'quiz' as const },
+    { label: 'Study Tips', icon: <Sparkles size={14} />, prompt: 'Give me 3 personalized study tips for this module based on my profile.', type: 'tip' as const },
+  ];
+
+  return (
+    <div className="flex flex-col h-[600px] bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+      <div className="p-6 border-b border-slate-100 bg-indigo-50/30 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+            <Sparkles size={20} />
+          </div>
+          <div>
+            <h5 className="font-bold text-slate-800">AI Study Assistant</h5>
+            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Personalized Learning Partner</p>
+          </div>
+        </div>
+      </div>
+
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/20 custom-scrollbar">
+        {messages.length === 0 && (
+          <div className="h-full flex flex-col items-center justify-center text-center p-8">
+            <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-200 mb-6 animate-pulse">
+              <Brain size={40} />
+            </div>
+            <h6 className="text-lg font-bold text-slate-800 mb-2">Hello, {profile.firstName}!</h6>
+            <p className="text-sm text-slate-500 max-w-xs mx-auto leading-relaxed">
+              I'm your AI Study Assistant. I can explain concepts, quiz you, or give you study tips. How can I help you today?
+            </p>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-8 w-full max-w-lg">
+              {quickActions.map((action, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    setMessages([{ role: 'user', text: action.label }]);
+                    generateResponse(action.prompt, action.type);
+                  }}
+                  className="p-4 bg-white border border-slate-100 rounded-2xl hover:border-indigo-200 hover:bg-indigo-50/50 transition-all group text-left"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                    {action.icon}
+                  </div>
+                  <p className="text-xs font-bold text-slate-700">{action.label}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {messages.map((m, idx) => (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            key={idx}
+            className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+          >
+            <div className={`max-w-[85%] p-5 rounded-3xl shadow-sm ${
+              m.role === 'user' 
+                ? 'bg-indigo-600 text-white rounded-tr-none' 
+                : 'bg-white text-slate-800 rounded-tl-none border border-slate-100'
+            }`}>
+              <div className="prose prose-sm max-w-none prose-slate text-inherit!">
+                <ReactMarkdown>{m.text}</ReactMarkdown>
+              </div>
+              {m.type && (
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2">
+                  <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${
+                    m.type === 'explanation' ? 'bg-emerald-50 text-emerald-600' :
+                    m.type === 'quiz' ? 'bg-amber-50 text-amber-600' :
+                    'bg-indigo-50 text-indigo-600'
+                  }`}>
+                    {m.type}
+                  </span>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        ))}
+        {isLoading && (
+          <div className="flex justify-start">
+            <div className="bg-white border border-slate-100 p-4 rounded-3xl rounded-tl-none shadow-sm flex items-center gap-3">
+              <div className="flex gap-1">
+                <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" />
+                <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.2s]" />
+                <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.4s]" />
+              </div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Thinking...</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="p-6 bg-white border-t border-slate-100">
+        <form onSubmit={handleSend} className="relative">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask me anything about this module..."
+            className="w-full bg-slate-50 border-none rounded-2xl pl-6 pr-14 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all"
+            disabled={isLoading}
+          />
+          <button
+            type="submit"
+            disabled={!input.trim() || isLoading}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50"
+          >
+            <Send size={18} />
+          </button>
+        </form>
       </div>
     </div>
   );
@@ -3877,15 +5216,17 @@ function YoutubeView({ module, onUpdate }: { module: Module, onUpdate: (updates:
   const [url, setUrl] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeVideo, setActiveVideo] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleAddVideo = async () => {
     const videoId = getYoutubeId(url);
     if (!videoId) {
-      alert("Invalid YouTube URL");
+      setError("Invalid YouTube URL. Please provide a valid YouTube link.");
       return;
     }
 
     setIsProcessing(true);
+    setError(null);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const response = await ai.models.generateContent({
@@ -3936,6 +5277,12 @@ function YoutubeView({ module, onUpdate }: { module: Module, onUpdate: (updates:
             YouTube Study Resources
           </h5>
         </div>
+
+        {error && (
+          <div className="mb-6">
+            <AIErrorMessage message={error} onRetry={() => setError(null)} />
+          </div>
+        )}
 
         <div className="flex gap-3">
           <input 
@@ -4054,15 +5401,387 @@ function YoutubeView({ module, onUpdate }: { module: Module, onUpdate: (updates:
   );
 }
 
-function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfirm }: { 
+function PronunciationCoach({ module, onUpdate }: { module: Module, onUpdate: (updates: any) => void }) {
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [targetText, setTargetText] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        setAudioBlob(blob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setFeedback(null);
+      setError(null);
+    } catch (err) {
+      console.error("Error accessing microphone:", err);
+      setError("Could not access microphone. Please check permissions.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+  const analyzePronunciation = async () => {
+    if (!audioBlob || !targetText) return;
+
+    setIsAnalyzing(true);
+    setError(null);
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(audioBlob);
+      reader.onloadend = async () => {
+        try {
+          const base64Audio = (reader.result as string).split(',')[1];
+          const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+          
+          const prompt = `You are a professional South African language pronunciation coach. 
+          The student is trying to pronounce the following word or phrase: "${targetText}".
+          
+          Analyze the provided audio recording and provide immediate, constructive feedback.
+          1. Accuracy Score (0-100%).
+          2. Specific corrections (break down syllables if needed).
+          3. Tips for improvement (e.g., tongue placement, emphasis).
+          4. A supportive message.
+          
+          Format the response using markdown.`;
+
+          const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash-native-audio-preview-09-2025",
+            contents: [
+              { text: prompt },
+              {
+                inlineData: {
+                  mimeType: "audio/webm",
+                  data: base64Audio
+                }
+              }
+            ]
+          });
+
+          if (!response.text) {
+            throw new Error("AI failed to provide feedback. Please try recording again.");
+          }
+
+          setFeedback(response.text);
+        } catch (innerError: any) {
+          console.error("Inner pronunciation analysis error:", innerError);
+          setError(innerError.message || 'Failed to analyze audio. Please try recording again.');
+        } finally {
+          setIsAnalyzing(false);
+        }
+      };
+    } catch (error: any) {
+      console.error("Error analyzing pronunciation:", error);
+      setError(error.message || 'An unexpected error occurred. Please try again.');
+      setIsAnalyzing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600">
+            <Mic size={20} />
+          </div>
+          <div>
+            <h5 className="font-bold text-slate-800">Pronunciation Coach</h5>
+            <p className="text-xs text-slate-500">Record your voice and get AI feedback on your South African language pronunciation.</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {error && <AIErrorMessage message={error} onRetry={analyzePronunciation} />}
+          
+          <div>
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Word or Phrase to Practice</label>
+            <input 
+              type="text" 
+              value={targetText}
+              onChange={(e) => setTargetText(e.target.value)}
+              placeholder="e.g., Sawubona, Dumelang, Goeie môre..."
+              className="w-full px-5 py-3 rounded-2xl bg-slate-50 border-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm font-medium"
+            />
+            <div className="flex flex-wrap gap-2 mt-3">
+              {['Sawubona', 'Dumelang', 'Goeie môre', 'Molo', 'Thobela'].map(phrase => (
+                <button 
+                  key={phrase}
+                  onClick={() => setTargetText(phrase)}
+                  className="px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-bold hover:bg-indigo-100 transition-colors"
+                >
+                  {phrase}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center justify-center py-8 border-2 border-dashed border-slate-100 rounded-[2rem] bg-slate-50/50">
+            {!isRecording ? (
+              <button 
+                onClick={startRecording}
+                disabled={!targetText}
+                className={`w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-lg ${!targetText ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:scale-110 active:scale-95'}`}
+              >
+                <Mic size={24} />
+              </button>
+            ) : (
+              <button 
+                onClick={stopRecording}
+                className="w-16 h-16 bg-red-500 text-white rounded-full flex items-center justify-center animate-pulse shadow-lg hover:scale-110 active:scale-95 transition-all"
+              >
+                <Square size={24} fill="currentColor" />
+              </button>
+            )}
+            <p className="mt-4 text-xs font-bold text-slate-500">
+              {isRecording ? "Recording... Click to stop" : audioBlob ? "Recording captured!" : "Click to start recording"}
+            </p>
+          </div>
+
+          {audioBlob && !isRecording && (
+            <div className="flex flex-col items-center gap-4">
+              <audio src={URL.createObjectURL(audioBlob)} controls className="w-full max-w-xs h-10" />
+              <button 
+                onClick={analyzePronunciation}
+                disabled={isAnalyzing}
+                className="flex items-center gap-2 px-8 py-3 bg-indigo-600 text-white rounded-2xl font-bold text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50"
+              >
+                {isAnalyzing ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={16} />
+                    Get AI Feedback
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {feedback && (
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-indigo-50 p-8 rounded-[2.5rem] border border-indigo-100"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <Sparkles size={18} className="text-indigo-600" />
+            <h6 className="font-bold text-indigo-900">AI Feedback</h6>
+          </div>
+          <div className="prose prose-sm prose-indigo max-w-none text-indigo-800">
+            <Markdown>{feedback}</Markdown>
+          </div>
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+function NotesEditor({ 
+  notes, 
+  learningOutcomes, 
+  onUpdate, 
+  isEditing, 
+  setIsEditing, 
+  editedNotes, 
+  setEditedNotes, 
+  isGenerating, 
+  generateAutoNotes, 
+  refineNotes, 
+  isUploading, 
+  handleFileUpload,
+  moduleTitle,
+  unitContext,
+  error,
+  setError
+}: {
+  notes?: string;
+  learningOutcomes?: string[];
+  onUpdate: (updates: { notes?: string; learningOutcomes?: string[] }) => void;
+  isEditing: boolean;
+  setIsEditing: (val: boolean) => void;
+  editedNotes: string;
+  setEditedNotes: (val: string) => void;
+  isGenerating: boolean;
+  generateAutoNotes: () => void;
+  refineNotes: () => void;
+  isUploading: boolean;
+  handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  moduleTitle: string;
+  unitContext: string;
+  error?: string | null;
+  setError?: (val: string | null) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      {error && (
+        <AIErrorMessage message={error} onRetry={() => setError?.(null)} />
+      )}
+      <div className="flex justify-between items-center px-2">
+        <h6 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+          {isEditing ? 'Edit Notes' : 'Study Notes'}
+        </h6>
+        <div className="flex items-center gap-2">
+          {notes && !isEditing && (
+            <button 
+              onClick={() => {
+                setEditedNotes(notes || '');
+                setIsEditing(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 hover:bg-slate-50 transition-all"
+            >
+              <Edit3 size={12} />
+              Edit
+            </button>
+          )}
+          <button 
+            onClick={refineNotes}
+            disabled={isGenerating || (isEditing ? !editedNotes.trim() : !notes?.trim())}
+            className="text-[10px] font-bold text-indigo-600 hover:bg-indigo-50 px-4 py-2 rounded-lg border border-indigo-100 flex items-center gap-2 disabled:opacity-50 transition-all"
+          >
+            {isGenerating ? <RotateCcw className="animate-spin" size={12} /> : <Sparkles size={12} />}
+            AI Refine & Expand
+          </button>
+        </div>
+      </div>
+
+      {learningOutcomes && learningOutcomes.length > 0 && (
+        <div className="p-6 bg-indigo-50/50 rounded-3xl border border-indigo-100/50">
+          <div className="flex items-center gap-2 mb-4">
+            <Target size={16} className="text-indigo-600" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-600">Learning Outcomes</span>
+          </div>
+          <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {learningOutcomes.map((lo, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs text-indigo-900 font-medium">
+                <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
+                {lo}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      
+      {!notes || isEditing ? (
+        <div className="space-y-6">
+          <textarea
+            value={editedNotes}
+            onChange={(e) => setEditedNotes(e.target.value)}
+            placeholder="Type or paste your notes here..."
+            className="w-full h-96 bg-slate-50 border-none rounded-[2rem] p-8 text-sm focus:ring-2 focus:ring-indigo-500 transition-all resize-none font-medium text-slate-700"
+          />
+
+          {!notes && !isEditing && (
+            <div className="flex flex-col gap-3">
+              <UniversalInput 
+                onProcess={async (data) => {
+                  let text = data.text;
+                  if (data.excelData) text += `\n\nExcel Data: ${JSON.stringify(data.excelData)}`;
+                  setEditedNotes(text);
+                  setIsEditing(true);
+                }} 
+                isProcessing={isUploading} 
+                placeholder="Or upload files to extract text..."
+                buttonLabel={isUploading ? "Uploading..." : "Extract from Files"}
+              />
+              <button 
+                onClick={generateAutoNotes}
+                disabled={isGenerating}
+                className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-6 py-3 rounded-xl border border-indigo-100 flex items-center gap-2 mx-auto disabled:opacity-50 transition-all"
+              >
+                {isGenerating ? <RotateCcw className="animate-spin" size={14} /> : <Sparkles size={14} />}
+                Generate Detailed Notes with AI
+              </button>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3">
+            {isEditing && (
+              <button 
+                onClick={() => setIsEditing(false)}
+                className="px-6 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all"
+              >
+                Cancel
+              </button>
+            )}
+            <button 
+              onClick={() => {
+                onUpdate({ notes: editedNotes });
+                setIsEditing(false);
+              }}
+              disabled={!editedNotes.trim()}
+              className="px-8 py-3 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50"
+            >
+              Save Notes
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <div className="p-8 bg-slate-50/50 rounded-3xl border border-slate-100 max-h-[600px] overflow-y-auto">
+            <div className="prose prose-sm max-w-none">
+              <Markdown>{notes}</Markdown>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <SpeechButton text={notes || ''} />
+            <CopyButton text={notes || ''} />
+            <button 
+              onClick={() => {
+                setEditedNotes(notes || '');
+                setIsEditing(true);
+              }}
+              className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all"
+            >
+              <Edit3 size={14} />
+              Edit Notes
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StudyMaterials({ module, onUpdate, profile, modules, communities, schedule, onConfirm }: { 
   module: Module, 
   onUpdate: (updates: Partial<Module>) => void,
   profile: UserProfile,
   modules: Module[],
+  communities: Community[],
   schedule: ScheduleItem[],
   onConfirm: (title: string, message: string, onConfirm: () => void) => void
 }) {
-  const [activeTab, setActiveTab] = useState<'notes' | 'summary' | 'flashcards' | 'quiz' | 'chat' | 'exams' | 'voice' | 'homework' | 'diagram' | 'mindmap' | 'generalChat' | 'youtube' | 'translator' | 'resources' | 'video'>(module.notes ? 'summary' : 'notes');
+  const [activeTab, setActiveTab] = useState<'units' | 'summary' | 'flashcards' | 'quiz' | 'chat' | 'exams' | 'voice' | 'homework' | 'diagram' | 'mindmap' | 'generalChat' | 'youtube' | 'translator' | 'resources' | 'video' | 'pronunciation' | 'virtual_classroom' | 'grades' | 'aiAssistant'>(module.units?.length ? 'units' : (module.notes ? 'summary' : 'units'));
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isGeneratingFlashcards, setIsGeneratingFlashcards] = useState(false);
@@ -4074,12 +5793,19 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
   const [isAddingResource, setIsAddingResource] = useState(false);
   const [newResource, setNewResource] = useState({ name: '', type: 'link' as 'link' | 'text', content: '' });
   const [isUploadingResource, setIsUploadingResource] = useState(false);
+  const [isGeneratingUnits, setIsGeneratingUnits] = useState(false);
+  const [sharingResource, setSharingResource] = useState<UnitResource | null>(null);
+  const [expandedUnitId, setExpandedUnitId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const selectedUnit = module.units?.find(u => u.id === selectedUnitId);
   const currentNotes = selectedUnit ? selectedUnit.notes : module.notes;
   const currentSummary = selectedUnit ? selectedUnit.summary : module.summary;
   const currentLearningOutcomes = selectedUnit ? selectedUnit.learningOutcomes : module.learningOutcomes;
   const currentResources = selectedUnit ? selectedUnit.resources : module.resources;
+  const currentFlashcards = selectedUnit ? selectedUnit.flashcards : module.flashcards;
+  const currentQuiz = selectedUnit ? selectedUnit.quiz : module.quiz;
+  const currentPracticeExams = selectedUnit ? selectedUnit.practiceExams : module.practiceExams;
 
   const handleUpdate = (updates: any) => {
     if (selectedUnitId) {
@@ -4089,6 +5815,35 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
       onUpdate({ units: newUnits });
     } else {
       onUpdate(updates);
+    }
+  };
+
+  const handleShareToCommunity = async (communityId: string) => {
+    if (!sharingResource) return;
+    
+    try {
+      const communityRef = doc(db, 'communities', communityId);
+      const community = communities.find(c => c.id === communityId);
+      if (!community) return;
+
+      const updatedResources = [
+        ...(community.resources || []),
+        {
+          id: Math.random().toString(36).substr(2, 9),
+          name: sharingResource.name,
+          type: sharingResource.type === 'file' ? 'text' : sharingResource.type,
+          content: sharingResource.content,
+          timestamp: Date.now(),
+          addedBy: profile.uid,
+          addedByName: `${profile.firstName} ${profile.lastName}`
+        }
+      ];
+
+      await updateDoc(communityRef, { resources: updatedResources });
+      setSharingResource(null);
+      onConfirm("Shared!", `Successfully shared "${sharingResource.name}" to ${community.name}`, () => {});
+    } catch (error) {
+      console.error("Error sharing resource:", error);
     }
   };
 
@@ -4159,15 +5914,70 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
     handleUpdate({ resources: filtered });
   };
 
+  const generateAIUnits = async () => {
+    if (!module.title) {
+      setError("Module title is required to generate units.");
+      return;
+    }
+    setIsGeneratingUnits(true);
+    setError(null);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const prompt = `Break down the academic module "${module.title}" into a logical sequence of 5-8 study units.
+      For each unit, provide:
+      1. Unit Number
+      2. Unit Name
+      3. A brief 1-sentence summary of what it covers.
+      
+      Return the result as a JSON array of objects with keys: "unitNumber", "name", "summary".`;
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: { responseMimeType: "application/json" }
+      });
+      
+      if (!response.text) {
+        throw new Error("AI failed to generate study units. Please try again.");
+      }
+
+      const suggestedUnits = JSON.parse(response.text);
+      if (!Array.isArray(suggestedUnits) || suggestedUnits.length === 0) {
+        throw new Error("AI failed to generate a valid unit sequence. Please try again.");
+      }
+
+      const newUnits = suggestedUnits.map((u: any) => ({
+        id: Math.random().toString(36).substr(2, 9),
+        unitNumber: u.unitNumber.toString(),
+        name: u.name,
+        summary: u.summary,
+        completed: false
+      }));
+      
+      onUpdate({ units: [...(module.units || []), ...newUnits] });
+    } catch (e: any) {
+      console.error('Error generating units:', e);
+      setError(e.message || 'Failed to generate study units. Please try again.');
+    } finally {
+      setIsGeneratingUnits(false);
+    }
+  };
+
   const mainTabs = [
-    { id: 'notes', label: 'Notes', icon: <FileText size={16} /> },
+    { id: 'units', label: 'Units & Notes', icon: <List size={16} /> },
     { id: 'summary', label: 'Summary', icon: <Brain size={16} /> },
     { id: 'resources', label: 'Resources', icon: <Paperclip size={16} /> },
+    { id: 'grades', label: 'Grades', icon: <Award size={16} /> },
     { id: 'translator', label: 'Translator', icon: <Languages size={16} /> },
     { id: 'flashcards', label: 'Flashcards', icon: <Layers size={16} /> },
     { id: 'quiz', label: 'Quiz', icon: <HelpCircle size={16} /> },
     { id: 'chat', label: 'Chatbot', icon: <MessageCircle size={16} /> },
+    { id: 'aiAssistant', label: 'Study Assistant', icon: <Sparkles size={16} /> },
   ];
+
+  if (isLanguageModule(module)) {
+    mainTabs.splice(4, 0, { id: 'pronunciation', label: 'Pronunciation', icon: <Mic size={16} /> });
+  }
 
   const moreTabs = [
     { id: 'exams', label: 'Practice Exams', icon: <Award size={16} /> },
@@ -4176,7 +5986,6 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
     { id: 'diagram', label: 'Diagram Generator', icon: <Workflow size={16} /> },
     { id: 'mindmap', label: 'Mind Map Creator', icon: <Network size={16} /> },
     { id: 'generalChat', label: 'AI Study Chat', icon: <MessageSquare size={16} /> },
-    { id: 'youtube', label: 'YouTube Videos', icon: <Youtube size={16} /> },
     { id: 'video', label: 'Video Generator', icon: <Video size={16} /> },
   ];
 
@@ -4261,10 +6070,12 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
 
   const generateAutoNotes = async () => {
     setIsGeneratingNotes(true);
+    setError(null);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const unitContext = selectedUnit ? `specifically for Unit ${selectedUnit.unitNumber}: "${selectedUnit.name}" (Summary: ${selectedUnit.summary || 'N/A'})` : '';
       const prompt = `
-        You are an expert academic note-taker. Generate comprehensive, high-quality academic study notes for the module "${module.title}".
+        You are an expert academic note-taker. Generate comprehensive, high-quality academic study notes for the module "${module.title}" ${unitContext}.
         
         Module Context:
         - Units: ${module.units?.map(u => u.name).join(', ')}
@@ -4278,7 +6089,7 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
            - Use consistent formatting: bullet points, numbered lists, and strategic indentation.
            - Ensure logical flow that is easy to scan and review.
         4. ACTIVE SYNTHESIS:
-           - Write in a personalized, student-friendly tone (as if explaining to oneself).
+           - Write in a personalized, student-friendly tone (as if explaining oneself).
            - Condense information into core concepts; avoid fluff.
            - Highlight key points, definitions, and formulas using bold text or callout blocks.
         5. VISUALS & INTERACTIVITY:
@@ -4302,14 +6113,19 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
         contents: prompt,
       });
       
+      if (!response.text) {
+        throw new Error("AI failed to generate study notes. Please try again.");
+      }
+
       const outcomes = await extractLearningOutcomes(response.text);
       if (outcomes) {
         handleUpdate({ notes: response.text, learningOutcomes: outcomes });
       } else {
         handleUpdate({ notes: response.text });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating auto notes:', error);
+      setError(error.message || 'Failed to generate study notes. Please check your connection and try again.');
     } finally {
       setIsGeneratingNotes(false);
     }
@@ -4317,12 +6133,17 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
 
   const refineNotes = async () => {
     const sourceText = isEditingNotes ? editedNotes : currentNotes;
-    if (!sourceText) return;
+    if (!sourceText) {
+      setError("No notes found to refine. Please provide some content first.");
+      return;
+    }
     setIsGeneratingNotes(true);
+    setError(null);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const unitContext = selectedUnit ? `specifically for Unit ${selectedUnit.unitNumber}: "${selectedUnit.name}"` : '';
       let prompt = `
-        Refine the following raw study notes into a comprehensive, high-quality academic study guide for the module "${module.title}".
+        Refine the following raw study notes into a comprehensive, high-quality academic study guide for the module "${module.title}" ${unitContext}.
         
         Raw Notes:
         ${sourceText.substring(0, 10000)}
@@ -4380,13 +6201,18 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
         contents: prompt,
       });
       
+      if (!response.text) {
+        throw new Error("AI failed to refine your notes. Please try again.");
+      }
+
       if (isEditingNotes) {
         setEditedNotes(response.text || '');
       } else {
         handleUpdate({ notes: response.text });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error refining notes:', error);
+      setError(error.message || 'Failed to refine notes. Please try again.');
     } finally {
       setIsGeneratingNotes(false);
     }
@@ -4394,7 +6220,12 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
 
   const generateSummary = async (data: { text: string; image?: string; excelData?: any[] }) => {
     setIsSummarizing(true);
+    setError(null);
     try {
+      if (!data.text && !data.image && (!data.excelData || data.excelData.length === 0)) {
+        throw new Error("Please provide some content to summarize.");
+      }
+
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
       let contextText = data.text;
@@ -4402,7 +6233,8 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
         contextText += `\n\nData from Excel: ${JSON.stringify(data.excelData)}`;
       }
 
-      let prompt = `Summarize the following content for the module "${module.title}". 
+      const unitContext = selectedUnit ? `specifically for Unit ${selectedUnit.unitNumber}: "${selectedUnit.name}"` : '';
+      let prompt = `Summarize the following content for the module "${module.title}" ${unitContext}. 
         
         CRITICAL GUIDELINES:
         1. Structure the summary based on the identified Learning Outcomes.
@@ -4435,9 +6267,15 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
         model: "gemini-3-flash-preview",
         contents: prompt,
       });
+
+      if (!response.text) {
+        throw new Error("AI failed to generate a summary. Please try again.");
+      }
+
       handleUpdate({ summary: response.text });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating summary:', error);
+      setError(error.message || 'Failed to generate summary. Please try again.');
     } finally {
       setIsSummarizing(false);
     }
@@ -4445,7 +6283,12 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
 
   const generateFlashcards = async (data: { text: string; image?: string; excelData?: any[] }) => {
     setIsGeneratingFlashcards(true);
+    setError(null);
     try {
+      if (!data.text && !data.image && (!data.excelData || data.excelData.length === 0)) {
+        throw new Error("Please provide some content to generate flashcards from.");
+      }
+
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
       let contextText = data.text;
@@ -4453,9 +6296,10 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
         contextText += `\n\nData from Excel: ${JSON.stringify(data.excelData)}`;
       }
 
+      const unitContext = selectedUnit ? `specifically for Unit ${selectedUnit.unitNumber}: "${selectedUnit.name}"` : '';
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: `Generate 10 flashcards from the following content for the module "${module.title}". 
+        contents: `Generate 10 flashcards from the following content for the module "${module.title}" ${unitContext}. 
         Each flashcard should have a question and a clear, concise answer.
         Return the result as a JSON array of objects with "question" and "answer" properties.
         
@@ -4464,10 +6308,20 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
         ${currentNotes ? `Context: ${currentNotes.substring(0, 5000)}` : ''}`,
         config: { responseMimeType: "application/json" }
       });
+
+      if (!response.text) {
+        throw new Error("AI failed to generate flashcards. Please try again.");
+      }
+
       const cards = JSON.parse(response.text);
+      if (!Array.isArray(cards) || cards.length === 0) {
+        throw new Error("AI failed to generate valid flashcards. Please try again.");
+      }
+
       onUpdate({ flashcards: cards.map((c: any) => ({ ...c, id: Math.random().toString(36).substr(2, 9) })) });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating flashcards:', error);
+      setError(error.message || 'Failed to generate flashcards. Please try again.');
     } finally {
       setIsGeneratingFlashcards(false);
     }
@@ -4475,6 +6329,64 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
 
   return (
     <div className="mt-8 space-y-6">
+      {/* Share Resource Modal */}
+      <AnimatePresence>
+        {sharingResource && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-8">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold text-slate-900">Share Resource</h3>
+                  <button onClick={() => setSharingResource(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                    <X size={20} className="text-slate-400" />
+                  </button>
+                </div>
+
+                <div className="mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                      {sharingResource.type === 'link' ? <LinkIcon size={20} /> : <FileText size={20} />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">{sharingResource.name}</p>
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">{sharingResource.type}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Community</p>
+                  <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                    {communities.filter(c => c.members.includes(profile.uid)).map(community => (
+                      <button
+                        key={community.id}
+                        onClick={() => handleShareToCommunity(community.id)}
+                        className="w-full p-4 flex items-center justify-between bg-white border border-slate-100 rounded-2xl hover:border-indigo-200 hover:bg-indigo-50/30 transition-all group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs ${community.avatarColor || 'bg-indigo-500'}`}>
+                            {community.name[0]}
+                          </div>
+                          <span className="text-sm font-bold text-slate-700">{community.name}</span>
+                        </div>
+                        <ChevronRight size={16} className="text-slate-300 group-hover:text-indigo-500 transition-colors" />
+                      </button>
+                    ))}
+                    {communities.filter(c => c.members.includes(profile.uid)).length === 0 && (
+                      <p className="text-center py-8 text-sm text-slate-400">You haven't joined any communities yet.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
@@ -4493,6 +6405,18 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
                   <option key={unit.id} value={unit.id}>Unit {unit.unitNumber}: {unit.name}</option>
                 ))}
               </select>
+              <button
+                onClick={() => onUpdate({ isLanguage: !isLanguageModule(module) })}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                  isLanguageModule(module)
+                    ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                }`}
+                title={isLanguageModule(module) ? "Mark as non-language module" : "Mark as language module"}
+              >
+                <Languages size={12} />
+                {isLanguageModule(module) ? 'Language' : 'General'}
+              </button>
             </div>
           </div>
         </div>
@@ -4573,156 +6497,411 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
       </div>
 
       <div className="min-h-[500px]">
+        {error && (
+          <div className="mb-6">
+            <AIErrorMessage message={error} onRetry={() => setError(null)} />
+          </div>
+        )}
         <AnimatePresence mode="wait">
-          {activeTab === 'notes' && (
+          {activeTab === 'units' && (
             <motion.div 
-              key="notes"
+              key="units"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               className="space-y-6"
             >
               <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8">
-                <div className="flex items-center justify-between mb-6">
-                  <h5 className="font-bold text-slate-800 flex items-center gap-2">
-                    <FileText size={18} className="text-indigo-600" />
-                    {selectedUnit ? `Unit ${selectedUnit.unitNumber} Notes` : 'Module Notes'}
-                  </h5>
-                  {currentNotes && (
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h5 className="font-bold text-slate-800 flex items-center gap-2 text-xl">
+                      <List size={24} className="text-indigo-600" />
+                      Units & Study Notes
+                    </h5>
+                    <p className="text-xs text-slate-400 mt-1">Manage your study units and their corresponding notes in one place</p>
+                  </div>
+                  <div className="flex items-center gap-3">
                     <button 
-                      onClick={() => handleUpdate({ notes: deleteField(), learningOutcomes: deleteField() } as any)}
-                      className="text-xs font-bold text-slate-400 hover:text-red-500"
+                      onClick={generateAIUnits}
+                      disabled={isGeneratingUnits}
+                      className="flex items-center gap-2 px-6 py-3 bg-indigo-50 text-indigo-600 rounded-2xl text-xs font-bold hover:bg-indigo-100 transition-all disabled:opacity-50"
                     >
-                      Clear All
+                      {isGeneratingUnits ? <RotateCcw className="animate-spin" size={16} /> : <Sparkles size={16} />}
+                      AI Suggest Units
                     </button>
-                  )}
+                    <button 
+                      onClick={() => {
+                        const newUnit = { 
+                          id: Math.random().toString(36).substr(2, 9), 
+                          unitNumber: (module.units?.length || 0) + 1 + '', 
+                          name: '', 
+                          completed: false 
+                        };
+                        onUpdate({ units: [...(module.units || []), newUnit] });
+                      }}
+                      className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-2xl text-xs font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all"
+                    >
+                      <Plus size={16} />
+                      Add New Unit
+                    </button>
+                  </div>
                 </div>
 
-                {currentLearningOutcomes && currentLearningOutcomes.length > 0 && (
-                  <div className="mb-8 p-6 bg-indigo-50/50 rounded-3xl border border-indigo-100/50">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Target size={16} className="text-indigo-600" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-600">Learning Outcomes</span>
-                    </div>
-                    <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {currentLearningOutcomes.map((lo, i) => (
-                        <li key={i} className="flex items-start gap-2 text-xs text-indigo-900 font-medium">
-                          <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
-                          {lo}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                
-                {!currentNotes || isEditingNotes ? (
-                  <div className="space-y-6">
-                    <div className="flex justify-between items-center px-2">
-                      <h6 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                        {isEditingNotes ? 'Edit Notes' : 'New Notes'}
-                      </h6>
-                      <div className="flex items-center gap-2">
-                        <button 
-                          onClick={refineNotes}
-                          disabled={isGeneratingNotes || !editedNotes.trim()}
-                          className="text-[10px] font-bold text-indigo-600 hover:bg-indigo-50 px-4 py-2 rounded-lg border border-indigo-100 flex items-center gap-2 disabled:opacity-50 transition-all"
-                        >
-                          {isGeneratingNotes ? <RotateCcw className="animate-spin" size={12} /> : <Sparkles size={12} />}
-                          AI Refine & Expand
-                        </button>
+                <div className="space-y-6">
+                  {/* Module Overview Notes Section */}
+                  <div className={`border-2 transition-all rounded-[2.5rem] overflow-hidden ${expandedUnitId === 'module-overview' ? 'border-indigo-100 bg-indigo-50/10' : 'border-slate-50 bg-slate-50/30'}`}>
+                    <button 
+                      onClick={() => {
+                        const newId = expandedUnitId === 'module-overview' ? null : 'module-overview';
+                        setExpandedUnitId(newId);
+                        setSelectedUnitId(null);
+                        setIsEditingNotes(false);
+                      }}
+                      className="w-full flex items-center justify-between p-6 hover:bg-white/50 transition-all text-left"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600">
+                          <BookOpen size={20} />
+                        </div>
+                        <div>
+                          <h6 className="font-bold text-slate-800">Module Overview Notes</h6>
+                          <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">General syllabus & high-level notes</p>
+                        </div>
                       </div>
-                    </div>
-                    
-                    <textarea
-                      value={editedNotes}
-                      onChange={(e) => setEditedNotes(e.target.value)}
-                      placeholder="Type or paste your notes here..."
-                      className="w-full h-96 bg-slate-50 border-none rounded-[2rem] p-8 text-sm focus:ring-2 focus:ring-indigo-500 transition-all resize-none font-medium text-slate-700"
-                    />
-
-                    {!currentNotes && !isEditingNotes && (
-                      <div className="flex flex-col gap-3">
-                        <UniversalInput 
-                          onProcess={async (data) => {
-                            let text = data.text;
-                            if (data.excelData) text += `\n\nExcel Data: ${JSON.stringify(data.excelData)}`;
-                            setEditedNotes(text);
-                          }} 
-                          isProcessing={isUploading} 
-                          placeholder="Or upload files to extract text..."
-                          buttonLabel={isUploading ? "Uploading..." : "Extract from Files"}
-                        />
-                        <button 
-                          onClick={generateAutoNotes}
-                          disabled={isGeneratingNotes || (selectedUnit ? false : !module.units?.length)}
-                          className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-6 py-3 rounded-xl border border-indigo-100 flex items-center gap-2 mx-auto disabled:opacity-50 transition-all"
-                        >
-                          {isGeneratingNotes ? <RotateCcw className="animate-spin" size={14} /> : <Sparkles size={14} />}
-                          {selectedUnit ? `Generate Notes for Unit ${selectedUnit.unitNumber}` : 'Generate Detailed Notes from Syllabus'}
-                        </button>
+                      <div className="flex items-center gap-3">
+                        {module.notes && <FileText size={16} className="text-indigo-400" />}
+                        <ChevronDown size={20} className={`text-slate-400 transition-transform ${expandedUnitId === 'module-overview' ? 'rotate-180' : ''}`} />
                       </div>
-                    )}
+                    </button>
 
-                    <div className="flex justify-end gap-3">
-                      {isEditingNotes && (
-                        <button 
-                          onClick={() => setIsEditingNotes(false)}
-                          className="px-6 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all"
+                    <AnimatePresence>
+                      {expandedUnitId === 'module-overview' && (
+                        <motion.div 
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
                         >
-                          Cancel
-                        </button>
+                          <div className="p-8 pt-0">
+                            <div className="h-px bg-indigo-100 mb-8" />
+                            <NotesEditor 
+                              notes={module.notes} 
+                              learningOutcomes={module.learningOutcomes}
+                              onUpdate={(updates) => onUpdate(updates)}
+                              isEditing={isEditingNotes}
+                              setIsEditing={setIsEditingNotes}
+                              editedNotes={editedNotes}
+                              setEditedNotes={setEditedNotes}
+                              isGenerating={isGeneratingNotes}
+                              generateAutoNotes={generateAutoNotes}
+                              refineNotes={refineNotes}
+                              isUploading={isUploading}
+                              handleFileUpload={handleFileUpload}
+                              moduleTitle={module.title}
+                              unitContext=""
+                              error={error}
+                              setError={setError}
+                            />
+                          </div>
+                        </motion.div>
                       )}
-                      <button 
-                        onClick={() => {
-                          handleUpdate({ notes: editedNotes });
-                          setIsEditingNotes(false);
-                        }}
-                        disabled={!editedNotes.trim()}
-                        className="px-8 py-3 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50"
-                      >
-                        Save Notes
-                      </button>
-                    </div>
+                    </AnimatePresence>
                   </div>
-                ) : (
-                  <div className="space-y-6">
-                    <div className="flex justify-between items-center px-2">
-                      <div className="flex items-center gap-2">
+
+                  <div className="flex items-center gap-4 px-4">
+                    <div className="h-px flex-1 bg-slate-100" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Study Units</span>
+                    <div className="h-px flex-1 bg-slate-100" />
+                  </div>
+
+                  {module.units?.map((unit, idx) => (
+                    <div key={unit.id} className={`border-2 transition-all rounded-[2.5rem] overflow-hidden ${expandedUnitId === unit.id ? 'border-indigo-100 bg-indigo-50/10' : 'border-slate-50 bg-slate-50/30'}`}>
+                      <div className="group flex items-center gap-4 p-6">
                         <button 
-                          onClick={refineNotes}
-                          disabled={isGeneratingNotes}
-                          className="text-[10px] font-bold text-indigo-600 hover:bg-indigo-50 px-4 py-2 rounded-lg border border-indigo-100 flex items-center gap-2 disabled:opacity-50 transition-all"
+                          onClick={() => {
+                            const newUnits = [...(module.units || [])];
+                            newUnits[idx].completed = !newUnits[idx].completed;
+                            onUpdate({ units: newUnits });
+                          }}
+                          className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center transition-all shrink-0 ${
+                            unit.completed 
+                              ? 'bg-emerald-500 border-emerald-500 text-white' 
+                              : 'border-slate-200 hover:border-indigo-400 bg-white'
+                          }`}
                         >
-                          {isGeneratingNotes ? <RotateCcw className="animate-spin" size={12} /> : <Sparkles size={12} />}
-                          Refine into Study Guide
+                          {unit.completed && <Check size={18} strokeWidth={3} />}
+                        </button>
+                        
+                        <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                          <div className="md:col-span-2">
+                            <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest mb-1 block">Unit #</label>
+                            <input 
+                              className="w-full bg-white border border-slate-200 rounded-xl text-sm py-2.5 px-4 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all font-bold text-slate-700" 
+                              value={unit.unitNumber} 
+                              onChange={(e) => {
+                                const newUnits = [...(module.units || [])];
+                                newUnits[idx].unitNumber = e.target.value;
+                                onUpdate({ units: newUnits });
+                              }}
+                              placeholder="e.g. 1"
+                            />
+                          </div>
+                          <div className="md:col-span-6">
+                            <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest mb-1 block">Unit Name</label>
+                            <input 
+                              className="w-full bg-white border border-slate-200 rounded-xl text-sm py-2.5 px-4 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all font-medium text-slate-600" 
+                              value={unit.name} 
+                              onChange={(e) => {
+                                const newUnits = [...(module.units || [])];
+                                newUnits[idx].name = e.target.value;
+                                onUpdate({ units: newUnits });
+                              }}
+                              placeholder="e.g. Introduction to Thermodynamics"
+                            />
+                          </div>
+                          <div className="md:col-span-4 flex items-center gap-2 pt-5">
+                            <button 
+                              onClick={() => {
+                                const newId = expandedUnitId === unit.id ? null : unit.id;
+                                setExpandedUnitId(newId);
+                                setSelectedUnitId(newId);
+                                setIsEditingNotes(false);
+                              }}
+                              className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-[10px] font-bold transition-all ${
+                                expandedUnitId === unit.id 
+                                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' 
+                                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100'
+                              }`}
+                            >
+                              <FileText size={14} />
+                              {expandedUnitId === unit.id ? 'Close Notes' : 'Study Notes'}
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setSelectedUnitId(unit.id);
+                                setActiveTab('resources');
+                              }}
+                              className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all"
+                            >
+                              <Paperclip size={14} />
+                              Resources
+                            </button>
+                          </div>
+                        </div>
+
+                        <button 
+                          onClick={() => {
+                            onConfirm(
+                              "Delete Unit",
+                              `Are you sure you want to delete Unit ${unit.unitNumber || idx + 1}? All unit-specific notes and resources will be lost.`,
+                              () => {
+                                const newUnits = (module.units || []).filter((_, i) => i !== idx);
+                                onUpdate({ units: newUnits });
+                                if (selectedUnitId === unit.id) setSelectedUnitId(null);
+                                if (expandedUnitId === unit.id) setExpandedUnitId(null);
+                              }
+                            );
+                          }}
+                          className="p-3 text-slate-300 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                        >
+                          <Trash2 size={18} />
                         </button>
                       </div>
-                      <p className="text-[10px] text-slate-400 font-medium italic">AI can help structure and expand your notes</p>
+
+                      <AnimatePresence>
+                        {expandedUnitId === unit.id && (
+                          <motion.div 
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="p-8 pt-0">
+                              <div className="h-px bg-indigo-100 mb-8" />
+                              <NotesEditor 
+                                notes={unit.notes} 
+                                learningOutcomes={unit.learningOutcomes}
+                                onUpdate={(updates) => {
+                                  const newUnits = (module.units || []).map(u => 
+                                    u.id === unit.id ? { ...u, ...updates } : u
+                                  );
+                                  onUpdate({ units: newUnits });
+                                }}
+                                isEditing={isEditingNotes}
+                                setIsEditing={setIsEditingNotes}
+                                editedNotes={editedNotes}
+                                setEditedNotes={setEditedNotes}
+                                isGenerating={isGeneratingNotes}
+                                generateAutoNotes={generateAutoNotes}
+                                refineNotes={refineNotes}
+                                isUploading={isUploading}
+                                handleFileUpload={handleFileUpload}
+                                moduleTitle={module.title}
+                                unitContext={`for Unit ${unit.unitNumber}: ${unit.name}`}
+                                error={error}
+                                setError={setError}
+                              />
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
-                    <div className="p-8 bg-slate-50/50 rounded-3xl border border-slate-100 max-h-[600px] overflow-y-auto">
-                      <div className="prose prose-sm max-w-none">
-                        <Markdown>{currentNotes}</Markdown>
+                  ))}
+
+                  {(!module.units || module.units.length === 0) && (
+                    <div className="text-center py-20 bg-slate-50/50 rounded-[2rem] border border-dashed border-slate-200">
+                      <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300 shadow-sm">
+                        <List size={32} />
                       </div>
+                      <p className="text-sm text-slate-400 font-medium">No units added yet.</p>
+                      <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-bold">Click "Add New Unit" to get started</p>
                     </div>
-                    <div className="flex justify-end gap-3">
-                      <SpeechButton text={currentNotes || ''} />
-                      <CopyButton text={currentNotes || ''} />
-                      <button 
-                        onClick={() => {
-                          setEditedNotes(currentNotes || '');
-                          setIsEditingNotes(true);
-                        }}
-                        className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all"
-                      >
-                        <Edit3 size={14} />
-                        Edit Notes
-                      </button>
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </motion.div>
           )}
+
+          {activeTab === 'grades' && (
+            <motion.div 
+              key="grades"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6"
+            >
+              <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8">
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h5 className="font-bold text-slate-800 flex items-center gap-2 text-xl">
+                      <Award size={24} className="text-indigo-600" />
+                      Grade Weighting & Calculations
+                    </h5>
+                    <p className="text-xs text-slate-400 mt-1">Configure how your final module mark is calculated</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block">Year Mark Weight (%)</label>
+                    <input 
+                      type="number" 
+                      className="w-full bg-slate-50 border-2 border-slate-50 rounded-2xl text-sm py-3 px-4 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent transition-all font-bold text-slate-700" 
+                      value={module.yearMarkWeight || ''} 
+                      onChange={(e) => onUpdate({ yearMarkWeight: parseInt(e.target.value) || 0 })}
+                      placeholder="e.g. 40"
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block">Exam Weight (%)</label>
+                    <input 
+                      type="number" 
+                      className="w-full bg-slate-50 border-2 border-slate-50 rounded-2xl text-sm py-3 px-4 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent transition-all font-bold text-slate-700" 
+                      value={module.examWeight || ''} 
+                      onChange={(e) => onUpdate({ examWeight: parseInt(e.target.value) || 0 })}
+                      placeholder="e.g. 60"
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block">Exam/Portfolio Mark (%)</label>
+                    <input 
+                      type="number" 
+                      className="w-full bg-slate-50 border-2 border-slate-50 rounded-2xl text-sm py-3 px-4 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent transition-all font-bold text-emerald-600" 
+                      value={module.examMark || ''} 
+                      onChange={(e) => onUpdate({ examMark: parseInt(e.target.value) || 0 })}
+                      placeholder="e.g. 75"
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest block">Pass Mark (%)</label>
+                    <input 
+                      type="number" 
+                      className="w-full bg-slate-50 border-2 border-slate-50 rounded-2xl text-sm py-3 px-4 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent transition-all font-bold text-slate-700" 
+                      value={module.passMark ?? profile?.defaultPassMark ?? 50} 
+                      onChange={(e) => onUpdate({ passMark: parseInt(e.target.value) || 50 })}
+                      placeholder="e.g. 50"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="bg-indigo-50/50 p-8 rounded-[2rem] border border-indigo-100 flex flex-col justify-between">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase text-indigo-400 tracking-widest mb-2">Calculated Year Mark</p>
+                      <p className="text-3xl font-bold text-indigo-600">
+                        {(() => {
+                          const assessments = module.assessments || [];
+                          const totalWeight = assessments.reduce((acc: number, a: any) => acc + (a.weight || 0), 0);
+                          if (totalWeight === 0) return '0%';
+                          const yearMark = assessments.reduce((acc: number, a: any) => acc + ((a.markReceived || 0) * (a.weight || 0)), 0) / totalWeight;
+                          return `${yearMark.toFixed(1)}%`;
+                        })()}
+                      </p>
+                    </div>
+                    <div className="mt-6 flex items-center gap-3 text-indigo-400">
+                      <BookOpen size={20} />
+                      <span className="text-[10px] font-bold uppercase tracking-widest">Based on {module.assessments?.length || 0} tasks</span>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-amber-50/50 p-8 rounded-[2rem] border border-amber-100 flex flex-col justify-between">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase text-amber-500 tracking-widest mb-2">Required in Exam to Pass</p>
+                      <p className="text-3xl font-bold text-amber-600">
+                        {(() => {
+                          const assessments = module.assessments || [];
+                          const totalWeight = assessments.reduce((acc: number, a: any) => acc + (a.weight || 0), 0);
+                          const yearMark = totalWeight === 0 ? 0 : assessments.reduce((acc: number, a: any) => acc + ((a.markReceived || 0) * (a.weight || 0)), 0) / totalWeight;
+                          
+                          const yWeight = module.yearMarkWeight || 0;
+                          const eWeight = module.examWeight || 0;
+                          const pMark = module.passMark ?? profile?.defaultPassMark ?? 50;
+                          
+                          const currentContribution = (yearMark * yWeight / 100);
+                          const needed = pMark - currentContribution;
+                          
+                          if (needed <= 0) return 'Passed!';
+                          if (eWeight === 0) return 'N/A';
+                          
+                          const requiredExam = (needed / eWeight) * 100;
+                          return requiredExam > 100 ? 'Impossible' : `${requiredExam.toFixed(1)}%`;
+                        })()}
+                      </p>
+                    </div>
+                    <div className="mt-6 flex items-center gap-3 text-amber-500">
+                      <AlertCircle size={20} />
+                      <span className="text-[10px] font-bold uppercase tracking-widest">Target: {module.passMark ?? profile?.defaultPassMark ?? 50}%</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-indigo-600 p-8 rounded-[2rem] shadow-xl shadow-indigo-100 flex flex-col justify-between text-white">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase text-indigo-200 tracking-widest mb-2">Final Module Mark</p>
+                      <p className="text-3xl font-bold">
+                        {(() => {
+                          const assessments = module.assessments || [];
+                          const totalWeight = assessments.reduce((acc: number, a: any) => acc + (a.weight || 0), 0);
+                          const yearMark = totalWeight === 0 ? 0 : assessments.reduce((acc: number, a: any) => acc + ((a.markReceived || 0) * (a.weight || 0)), 0) / totalWeight;
+                          
+                          const yWeight = module.yearMarkWeight || 0;
+                          const eWeight = module.examWeight || 0;
+                          const eMark = module.examMark || 0;
+                          
+                          const finalMark = (yearMark * yWeight / 100) + (eMark * eWeight / 100);
+                          return `${finalMark.toFixed(1)}%`;
+                        })()}
+                      </p>
+                    </div>
+                    <div className="mt-6 flex items-center gap-3 text-indigo-200">
+                      <Award size={20} />
+                      <span className="text-[10px] font-bold uppercase tracking-widest">Overall Performance</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
 
           {activeTab === 'summary' && (
             <motion.div 
@@ -4927,24 +7106,37 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
                             </p>
                             <div className="mt-3 flex items-center gap-2">
                               {resource.type === 'link' ? (
-                                <a 
-                                  href={resource.content.startsWith('http') ? resource.content : `https://${resource.content}`} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="text-[10px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
-                                >
-                                  Open Link <ExternalLink size={10} />
-                                </a>
+                                <div className="flex items-center gap-3">
+                                  <a 
+                                    href={resource.content.startsWith('http') ? resource.content : `https://${resource.content}`} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-[10px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                                  >
+                                    Open Link <ExternalLink size={10} />
+                                  </a>
+                                  <button 
+                                    onClick={() => setSharingResource(resource)}
+                                    className="text-[10px] font-bold text-slate-400 hover:text-indigo-600 flex items-center gap-1 transition-colors"
+                                  >
+                                    <Share2 size={10} /> Share
+                                  </button>
+                                </div>
                               ) : (
-                                <button 
-                                  onClick={() => {
-                                    // Logic to view text/file content
-                                    alert(resource.content);
-                                  }}
-                                  className="text-[10px] font-bold text-indigo-600 hover:underline"
-                                >
-                                  View Content
-                                </button>
+                                <div className="flex items-center gap-3">
+                                  <button 
+                                    onClick={() => onConfirm(resource.name, resource.content, () => {})}
+                                    className="text-[10px] font-bold text-indigo-600 hover:underline"
+                                  >
+                                    View Content
+                                  </button>
+                                  <button 
+                                    onClick={() => setSharingResource(resource)}
+                                    className="text-[10px] font-bold text-slate-400 hover:text-indigo-600 flex items-center gap-1 transition-colors"
+                                  >
+                                    <Share2 size={10} /> Share
+                                  </button>
+                                </div>
                               )}
                             </div>
                           </div>
@@ -4975,17 +7167,17 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
                 <div className="flex items-center justify-between mb-6">
                   <h5 className="font-bold text-slate-800 flex items-center gap-2">
                     <Layers size={18} className="text-indigo-600" />
-                    Flashcard Generator
+                    {selectedUnit ? `Unit ${selectedUnit.unitNumber} Flashcards` : 'Flashcard Generator'}
                   </h5>
                   <div className="flex items-center gap-4">
-                    {module.flashcards?.length ? (
+                    {currentFlashcards?.length ? (
                       <>
                         <CopyButton 
-                          text={module.flashcards.map(f => `Q: ${f.question}\nA: ${f.answer}`).join('\n\n')} 
+                          text={currentFlashcards.map(f => `Q: ${f.question}\nA: ${f.answer}`).join('\n\n')} 
                           className="!bg-slate-50 border-none"
                         />
                         <button 
-                          onClick={() => onUpdate({ flashcards: [] })}
+                          onClick={() => handleUpdate({ flashcards: [] })}
                           className="text-xs font-bold text-slate-400 hover:text-red-500"
                         >
                           Clear All
@@ -4997,7 +7189,7 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
                 <UniversalInput 
                   onProcess={generateFlashcards} 
                   isProcessing={isGeneratingFlashcards} 
-                  placeholder="Generate cards from specific topics? Paste text or upload files..."
+                  placeholder={selectedUnit ? `Generate cards for Unit ${selectedUnit.unitNumber}?` : "Generate cards from specific topics? Paste text or upload files..."}
                   buttonLabel={isGeneratingFlashcards ? "Generating Cards..." : "Generate Flashcards"}
                 />
               </div>
@@ -5008,20 +7200,20 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
                     <RotateCcw className="animate-spin text-indigo-400" size={32} />
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Generating flashcards...</p>
                   </div>
-                ) : module.flashcards?.length ? (
-                  module.flashcards.map((card, idx) => (
+                ) : currentFlashcards?.length ? (
+                  currentFlashcards.map((card, idx) => (
                     <FlashcardItem 
                       key={card.id} 
                       card={card} 
                       index={idx} 
                       onUpdate={(updates) => {
-                        const newCards = [...(module.flashcards || [])];
+                        const newCards = [...(currentFlashcards || [])];
                         newCards[idx] = { ...newCards[idx], ...updates };
-                        onUpdate({ flashcards: newCards });
+                        handleUpdate({ flashcards: newCards });
                       }}
                       onDelete={() => {
-                        const newCards = (module.flashcards || []).filter((_, i) => i !== idx);
-                        onUpdate({ flashcards: newCards });
+                        const newCards = (currentFlashcards || []).filter((_, i) => i !== idx);
+                        handleUpdate({ flashcards: newCards });
                       }}
                     />
                   ))
@@ -5036,25 +7228,45 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
 
           {activeTab === 'quiz' && (
             <motion.div key="quiz" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-              <ModuleQuiz module={module} onUpdate={onUpdate} />
+              <ModuleQuiz module={module} onUpdate={handleUpdate} selectedUnitId={selectedUnitId} />
             </motion.div>
           )}
 
           {activeTab === 'exams' && (
             <motion.div key="exams" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-              <ModulePracticeExam module={module} onUpdate={onUpdate} />
+              <ModulePracticeExam module={module} onUpdate={handleUpdate} selectedUnitId={selectedUnitId} />
             </motion.div>
           )}
 
           {activeTab === 'chat' && (
             <motion.div key="chat" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-              <ModuleChatbot module={module} onUpdate={onUpdate} onConfirm={onConfirm} />
+              <ModuleChatbot profile={profile} schedule={schedule} module={module} onUpdate={onUpdate} onConfirm={onConfirm} />
+            </motion.div>
+          )}
+
+          {activeTab === 'aiAssistant' && (
+            <motion.div key="aiAssistant" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+              <AIStudyAssistant profile={profile} module={module} onUpdate={onUpdate} onConfirm={onConfirm} />
+            </motion.div>
+          )}
+
+          {activeTab === 'pronunciation' && (
+            <motion.div key="pronunciation" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+              <PronunciationCoach module={module} onUpdate={onUpdate} />
             </motion.div>
           )}
 
           {activeTab === 'voice' && (
             <motion.div key="voice" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-              <ModuleVoiceTutor profile={profile} module={module} onUpdate={onUpdate} />
+              <ModuleVoiceTutor 
+                profile={profile} 
+                module={module} 
+                onUpdate={onUpdate} 
+                communities={communities} 
+                handleShareToCommunity={handleShareToCommunity} 
+                sharingResource={sharingResource} 
+                setSharingResource={setSharingResource} 
+              />
             </motion.div>
           )}
 
@@ -5079,16 +7291,6 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
           {activeTab === 'generalChat' && (
             <motion.div key="generalChat" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
               <AIChatView profile={profile} modules={modules} schedule={schedule} module={module} />
-            </motion.div>
-          )}
-          {activeTab === 'youtube' && (
-            <motion.div 
-              key="youtube"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-            >
-              <YoutubeView module={module} onUpdate={onUpdate} />
             </motion.div>
           )}
           {activeTab === 'translator' && (
@@ -5117,33 +7319,26 @@ function StudyMaterials({ module, onUpdate, profile, modules, schedule, onConfir
   );
 }
 
-function TabButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
-  return (
-    <button 
-      onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
-        active 
-          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-100' 
-          : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-100'
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
-function ModulePracticeExam({ module, onUpdate }: { module: Module, onUpdate: (updates: Partial<Module>) => void }) {
+function ModulePracticeExam({ module, onUpdate, selectedUnitId }: { module: Module, onUpdate: (updates: Partial<Module>) => void, selectedUnitId?: string | null }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [exam, setExam] = useState<PracticeExam | null>(null);
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+
+  const selectedUnit = module.units?.find(u => u.id === selectedUnitId);
+  const currentExams = selectedUnit ? selectedUnit.practiceExams : module.practiceExams;
 
   const generateExam = async (data: { text: string; image?: string; excelData?: any[] }) => {
     setIsGenerating(true);
+    setError(null);
     try {
+      if (!data.text && !data.image && (!data.excelData || data.excelData.length === 0)) {
+        throw new Error("Please provide some content (text, image, or file) to generate an exam from.");
+      }
+
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
       let contextText = data.text;
@@ -5151,23 +7346,34 @@ function ModulePracticeExam({ module, onUpdate }: { module: Module, onUpdate: (u
         contextText += `\n\nData from Excel: ${JSON.stringify(data.excelData)}`;
       }
 
+      const unitContext = selectedUnit ? `specifically for Unit ${selectedUnit.unitNumber}: "${selectedUnit.name}"` : '';
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: `Generate a comprehensive practice exam for the module "${module.title}". 
+        contents: `Generate a comprehensive practice exam for the module "${module.title}" ${unitContext}. 
         Include 10 multiple choice questions covering various topics from the provided content.
         Each question should have 4 options and one correct answer.
-        Include a brief explanation for the correct answer.
-        Return the result as a JSON object with "title" and "questions" (array of objects with "question", "options", "correctAnswer", "explanation").
+        Include a detailed, educational explanation for the correct answer.
+        Also, identify 2-4 "keyConcepts" (short phrases or terms) that appear in the explanation which are central to understanding the answer.
+        Return the result as a JSON object with "title" and "questions" (array of objects with "question", "options", "correctAnswer", "explanation", "keyConcepts").
         
         Content:
         ${contextText}
         ${module.notes ? `Module Notes Context: ${module.notes.substring(0, 5000)}` : ''}`,
         config: { responseMimeType: "application/json" }
       });
+
+      if (!response.text) {
+        throw new Error("AI returned an empty exam. Please try again with more content.");
+      }
+
       const dataResponse = JSON.parse(response.text);
+      if (!dataResponse.questions || !Array.isArray(dataResponse.questions) || dataResponse.questions.length === 0) {
+        throw new Error("AI failed to generate valid questions. Please try again.");
+      }
+
       const newExam: PracticeExam = {
         id: Math.random().toString(36).substr(2, 9),
-        title: dataResponse.title || `${module.title} Practice Exam`,
+        title: dataResponse.title || (selectedUnit ? `Unit ${selectedUnit.unitNumber} Practice Exam` : `${module.title} Practice Exam`),
         questions: dataResponse.questions.map((q: any) => ({ ...q, id: Math.random().toString(36).substr(2, 9) })),
         timeLimit: 15
       };
@@ -5176,8 +7382,9 @@ function ModulePracticeExam({ module, onUpdate }: { module: Module, onUpdate: (u
       setAnswers({});
       setIsSubmitted(false);
       setTimeLeft(newExam.timeLimit * 60);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating exam:', error);
+      setError(error.message || 'An unexpected error occurred while generating your practice exam. Please try again.');
     } finally {
       setIsGenerating(false);
     }
@@ -5200,7 +7407,7 @@ function ModulePracticeExam({ module, onUpdate }: { module: Module, onUpdate: (u
     });
     const score = Math.round((correctCount / (exam?.questions.length || 1)) * 100);
     
-    const updatedExams = [...(module.practiceExams || []), { ...exam!, lastScore: score, completedAt: new Date() }];
+    const updatedExams = [...(currentExams || []), { ...exam!, lastScore: score, completedAt: new Date() }];
     onUpdate({ practiceExams: updatedExams });
   };
 
@@ -5209,14 +7416,60 @@ function ModulePracticeExam({ module, onUpdate }: { module: Module, onUpdate: (u
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-10">
         <div className="text-center mb-8">
           <Award size={48} className="mx-auto text-indigo-200 mb-4" />
-          <h5 className="text-xl font-bold text-slate-800 mb-2">Practice Exams</h5>
-          <p className="text-slate-500 max-w-md mx-auto">Take a timed, comprehensive exam to simulate real test conditions and master the material.</p>
+          <h5 className="text-xl font-bold text-slate-800 mb-2">
+            {selectedUnit ? `Unit ${selectedUnit.unitNumber} Practice Exam` : 'Practice Exams'}
+          </h5>
+          <p className="text-slate-500 max-w-md mx-auto">
+            {selectedUnit 
+              ? `Take a timed, comprehensive exam for Unit ${selectedUnit.unitNumber} to simulate real test conditions.`
+              : 'Take a timed, comprehensive exam to simulate real test conditions and master the material.'}
+          </p>
         </div>
+
+        {error && (
+          <div className="mb-6">
+            <AIErrorMessage 
+              message={error} 
+              onRetry={() => {
+                const context = selectedUnit ? (selectedUnit.notes || selectedUnit.summary || '') : (module.notes || '');
+                if (context) generateExam({ text: context });
+              }} 
+            />
+          </div>
+        )}
+
+        {currentExams && currentExams.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            {currentExams.map((ex) => (
+              <button
+                key={ex.id}
+                onClick={() => {
+                  setExam(ex);
+                  setCurrentQuestionIdx(0);
+                  setAnswers({});
+                  setIsSubmitted(false);
+                  setTimeLeft((ex.timeLimit || 15) * 60);
+                }}
+                className="p-6 rounded-3xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-md transition-all text-left group"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h6 className="font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{ex.title}</h6>
+                  {ex.lastScore !== undefined && (
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${ex.lastScore >= 50 ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+                      {ex.lastScore}%
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400">{ex.questions.length} Questions • {ex.timeLimit} Minutes</p>
+              </button>
+            ))}
+          </div>
+        )}
         
         <UniversalInput 
           onProcess={generateExam} 
           isProcessing={isGenerating} 
-          placeholder="What topics should the exam focus on? Paste text or upload files..."
+          placeholder={selectedUnit ? `What should the Unit ${selectedUnit.unitNumber} exam focus on?` : "What topics should the exam focus on? Paste text or upload files..."}
           buttonLabel={isGenerating ? "Preparing Exam..." : "Start Practice Exam"}
         />
       </div>
@@ -5277,8 +7530,15 @@ function ModulePracticeExam({ module, onUpdate }: { module: Module, onUpdate: (u
                   </p>
                   {q.explanation && (
                     <div className="relative group/exp">
-                      <p className="text-xs italic text-slate-500 bg-white/50 p-2 rounded-lg pr-8">{q.explanation}</p>
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                      <div className="p-2 bg-white/50 rounded-lg pr-8">
+                        <InteractiveExplanation 
+                          explanation={q.explanation} 
+                          keyConcepts={q.keyConcepts}
+                          moduleId={module.id}
+                          moduleTitle={module.title}
+                        />
+                      </div>
+                      <div className="absolute right-2 top-2">
                         <SpeechButton text={q.explanation} className="!bg-transparent !p-0 !shadow-none !border-none !text-slate-300 hover:!text-indigo-400" />
                       </div>
                     </div>
@@ -5342,7 +7602,15 @@ function ModulePracticeExam({ module, onUpdate }: { module: Module, onUpdate: (u
   );
 }
 
-function ModuleVoiceTutor({ profile, module, onUpdate }: { profile: UserProfile | null, module: Module, onUpdate: (updates: Partial<Module>) => void }) {
+function ModuleVoiceTutor({ profile, module, onUpdate, communities, handleShareToCommunity, sharingResource, setSharingResource }: { 
+  profile: UserProfile | null, 
+  module: Module, 
+  onUpdate: (updates: Partial<Module>) => void,
+  communities: Community[],
+  handleShareToCommunity: (communityId: string) => void,
+  sharingResource: UnitResource | null,
+  setSharingResource: (resource: UnitResource | null) => void
+}) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentAudioUrl, setCurrentAudioUrl] = useState<string | null>(null);
@@ -5354,6 +7622,7 @@ function ModuleVoiceTutor({ profile, module, onUpdate }: { profile: UserProfile 
   const [localSpeakingRate, setLocalSpeakingRate] = useState(profile?.voiceTutorSettings?.speakingRate ?? 1.0);
   const [localPitch, setLocalPitch] = useState(profile?.voiceTutorSettings?.pitch ?? 0);
   const [showSettings, setShowSettings] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const voiceSettings = profile?.voiceTutorSettings || {
@@ -5393,7 +7662,12 @@ function ModuleVoiceTutor({ profile, module, onUpdate }: { profile: UserProfile 
   const startLesson = async (data: { text: string; image?: string; excelData?: any[] }) => {
     setIsGenerating(true);
     setProgress(0);
+    setError(null);
     try {
+      if (!data.text && !data.image && (!data.excelData || data.excelData.length === 0)) {
+        throw new Error("Please provide some content (text, image, or file) for the tutor to explain.");
+      }
+
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
       let contextText = data.text;
@@ -5415,6 +7689,9 @@ function ModuleVoiceTutor({ profile, module, onUpdate }: { profile: UserProfile 
       });
       
       const script = scriptResponse.text || '';
+      if (!script) {
+        throw new Error("AI failed to generate a lesson script. Please try again.");
+      }
       setCurrentTranscript(script);
 
       const ttsResponse = await ai.models.generateContent({
@@ -5448,9 +7725,12 @@ function ModuleVoiceTutor({ profile, module, onUpdate }: { profile: UserProfile 
 
         const updatedHistory = [newHistoryItem, ...(module.voiceTutorHistory || [])];
         onUpdate({ voiceTutorHistory: updatedHistory });
+      } else {
+        throw new Error("Failed to synthesize audio for the lesson. Please try again.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Voice tutor error:', error);
+      setError(error.message || 'Failed to generate voice lesson. Please check your connection and try again.');
     } finally {
       setIsGenerating(false);
     }
@@ -5463,6 +7743,64 @@ function ModuleVoiceTutor({ profile, module, onUpdate }: { profile: UserProfile 
 
   return (
     <div className="space-y-8">
+      {/* Share Resource Modal */}
+      <AnimatePresence>
+        {sharingResource && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-8">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold text-slate-900">Share Resource</h3>
+                  <button onClick={() => setSharingResource(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                    <X size={20} className="text-slate-400" />
+                  </button>
+                </div>
+
+                <div className="mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                      {sharingResource.type === 'link' ? <LinkIcon size={20} /> : <FileText size={20} />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">{sharingResource.name}</p>
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">{sharingResource.type}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Community</p>
+                  <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                    {profile && communities.filter(c => c.members.includes(profile.uid)).map(community => (
+                      <button
+                        key={community.id}
+                        onClick={() => handleShareToCommunity(community.id)}
+                        className="w-full p-4 flex items-center justify-between bg-white border border-slate-100 rounded-2xl hover:border-indigo-200 hover:bg-indigo-50/30 transition-all group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs ${community.avatarColor || 'bg-indigo-500'}`}>
+                            {community.name[0]}
+                          </div>
+                          <span className="text-sm font-bold text-slate-700">{community.name}</span>
+                        </div>
+                        <ChevronRight size={16} className="text-slate-300 group-hover:text-indigo-500 transition-colors" />
+                      </button>
+                    ))}
+                    {profile && communities.filter(c => c.members.includes(profile.uid)).length === 0 && (
+                      <p className="text-center py-8 text-sm text-slate-400">You haven't joined any communities yet.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
       <div className="bg-white rounded-[2.5rem] p-10 border border-slate-100 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
           <div className="flex items-center gap-4">
@@ -5503,6 +7841,12 @@ function ModuleVoiceTutor({ profile, module, onUpdate }: { profile: UserProfile 
             </div>
           </div>
         </div>
+
+        {error && (
+          <div className="mb-8">
+            <AIErrorMessage message={error} onRetry={() => startLesson({ text: module.notes || '' })} />
+          </div>
+        )}
 
         <AnimatePresence>
           {showSettings && (
@@ -5703,11 +8047,17 @@ function VideoExplanationGenerator({ module }: { module: Module }) {
   const [videoData, setVideoData] = useState<{ slides: { text: string, narration: string }[], audioUrl: string | null } | null>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const generateVideo = async (data: { text: string; image?: string; excelData?: any[] }) => {
     setIsGenerating(true);
+    setError(null);
     try {
+      if (!data.text && !data.image && (!data.excelData || data.excelData.length === 0)) {
+        throw new Error("Please provide some content (text, image, or file) to generate a video explanation from.");
+      }
+
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
       let contextText = data.text;
@@ -5732,7 +8082,14 @@ function VideoExplanationGenerator({ module }: { module: Module }) {
         config: { responseMimeType: "application/json" }
       });
 
+      if (!result.text) {
+        throw new Error("AI failed to generate video slides. Please try again.");
+      }
+
       const slides = JSON.parse(result.text);
+      if (!Array.isArray(slides) || slides.length === 0) {
+        throw new Error("AI failed to generate valid slides. Please try again.");
+      }
 
       // 2. Convert narration to speech
       const fullNarration = slides.map((s: any) => s.narration).join(' ... ');
@@ -5754,10 +8111,13 @@ function VideoExplanationGenerator({ module }: { module: Module }) {
         setVideoData({ slides, audioUrl });
         setCurrentSlide(0);
         setIsPlaying(false);
+      } else {
+        throw new Error("Failed to synthesize audio for the video. Please try again.");
       }
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Video generation failed:", error);
+      setError(error.message || 'Failed to generate video explanation. Please try again.');
     } finally {
       setIsGenerating(false);
     }
@@ -5802,6 +8162,8 @@ function VideoExplanationGenerator({ module }: { module: Module }) {
           </button>
         )}
       </div>
+
+      {error && <AIErrorMessage message={error} onRetry={() => setVideoData(null)} />}
 
       {!videoData && !isGenerating && (
         <div className="bg-white p-8 rounded-3xl border border-indigo-100 shadow-sm">
@@ -5894,11 +8256,12 @@ function VideoExplanationGenerator({ module }: { module: Module }) {
     </div>
   );
 }
-function ModuleCard({ module, profile, modules, schedule, onUpdate, onAddAssessment, onRemove, onConfirm, onViewDetails, isDetailed }: any) {
+function ModuleCard({ module, profile, modules, communities, schedule, onUpdate, onAddAssessment, onRemove, onConfirm, onViewDetails, isDetailed }: any) {
   const [isEditing, setIsEditing] = useState(false);
   const [localModule, setLocalModule] = useState(module);
   const [isUnitsOpen, setIsUnitsOpen] = useState(false);
   const [isGeneratingOverview, setIsGeneratingOverview] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [ytUrl, setYtUrl] = useState('');
   const [isProcessingYt, setIsProcessingYt] = useState(false);
   const [activeYtVideo, setActiveYtVideo] = useState<YoutubeVideo | null>(null);
@@ -5935,6 +8298,7 @@ function ModuleCard({ module, profile, modules, schedule, onUpdate, onAddAssessm
 
   const generateAIOverview = async () => {
     setIsGeneratingOverview(true);
+    setError(null);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const prompt = `Generate a concise AI overview for the module "${module.title}".
@@ -5949,9 +8313,14 @@ function ModuleCard({ module, profile, modules, schedule, onUpdate, onAddAssessm
         contents: prompt,
       });
 
+      if (!response.text) {
+        throw new Error("AI returned an empty overview. Please try again.");
+      }
+
       onUpdate({ aiOverview: response.text });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating AI overview:', error);
+      setError(error.message || 'Failed to generate AI overview. Please try again.');
     } finally {
       setIsGeneratingOverview(false);
     }
@@ -5960,11 +8329,12 @@ function ModuleCard({ module, profile, modules, schedule, onUpdate, onAddAssessm
   const handleAddYtVideo = async () => {
     const videoId = getYoutubeId(ytUrl);
     if (!videoId) {
-      alert("Invalid YouTube URL");
+      setError("Invalid YouTube URL. Please provide a valid YouTube link.");
       return;
     }
 
     setIsProcessingYt(true);
+    setError(null);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const response = await ai.models.generateContent({
@@ -5978,6 +8348,10 @@ function ModuleCard({ module, profile, modules, schedule, onUpdate, onAddAssessm
         }
       });
 
+      if (!response.text) {
+        throw new Error("AI could not analyze the video. Please try again.");
+      }
+
       const data = JSON.parse(response.text);
       const newVideo: YoutubeVideo = {
         id: Math.random().toString(36).substr(2, 9),
@@ -5989,17 +8363,19 @@ function ModuleCard({ module, profile, modules, schedule, onUpdate, onAddAssessm
 
       onUpdate({ youtubeVideos: [...(module.youtubeVideos || []), newVideo] });
       setYtUrl('');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error processing YouTube video:", error);
+      // Fallback: add video without AI summary if AI fails, but show a warning
       const newVideo: YoutubeVideo = {
         id: Math.random().toString(36).substr(2, 9),
         url: ytUrl,
         title: "YouTube Video",
-        summary: "Could not auto-generate summary.",
+        summary: "Could not auto-generate summary due to an error.",
         timestamp: new Date()
       };
       onUpdate({ youtubeVideos: [...(module.youtubeVideos || []), newVideo] });
       setYtUrl('');
+      setError(error.message || 'Video added, but AI analysis failed. You can still watch the video.');
     } finally {
       setIsProcessingYt(false);
     }
@@ -6024,30 +8400,43 @@ function ModuleCard({ module, profile, modules, schedule, onUpdate, onAddAssessm
                 />
               ) : (
                 <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-1">
-                    <h3 className="text-2xl font-bold text-slate-800">{module.title}</h3>
-                    {stats.average !== null && (
-                      <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                        <Award size={10} />
-                        Avg: {stats.average}%
-                      </div>
-                    )}
-                  </div>
-                  {module.units && module.units.length > 0 && (
-                    <div className="mt-3 max-w-md">
-                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
-                        <span>Unit Progress</span>
-                        <span className="text-indigo-600">{stats.unitProgress}%</span>
-                      </div>
-                      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                        <motion.div 
-                          initial={{ width: 0 }}
-                          animate={{ width: `${stats.unitProgress}%` }}
-                          className="h-full bg-indigo-500 shadow-[0_0_10px_rgba(79,70,229,0.3)]"
-                        />
-                      </div>
+                  <div className="flex items-center gap-4 mb-1">
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
+                      module.moduleType === 'Exam' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                      module.moduleType === 'Portfolio' ? 'bg-blue-50 text-blue-600 border border-blue-100' :
+                      'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                    }`}>
+                      {module.moduleType === 'Exam' && <GraduationCap size={24} />}
+                      {module.moduleType === 'Portfolio' && <Briefcase size={24} />}
+                      {module.moduleType === 'Assessment Only' && <ClipboardCheck size={24} />}
                     </div>
-                  )}
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-2xl font-bold text-slate-800">{module.title}</h3>
+                        {stats.average !== null && (
+                          <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                            <Award size={10} />
+                            Avg: {stats.average}%
+                          </div>
+                        )}
+                      </div>
+                      {module.units && module.units.length > 0 && (
+                        <div className="mt-2 w-48">
+                          <div className="flex items-center justify-between text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                            <span>Progress</span>
+                            <span className="text-indigo-600">{stats.unitProgress}%</span>
+                          </div>
+                          <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                            <motion.div 
+                              initial={{ width: 0 }}
+                              animate={{ width: `${stats.unitProgress}%` }}
+                              className="h-full bg-indigo-500"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
               <div className="flex items-center gap-3">
@@ -6097,19 +8486,47 @@ function ModuleCard({ module, profile, modules, schedule, onUpdate, onAddAssessm
             </div>
             <div className="flex items-center gap-4 mt-2">
               {isEditing ? (
-                <select 
-                  className="bg-slate-50 border-none rounded-xl text-xs font-bold py-2 px-4 focus:ring-0 text-slate-500 uppercase tracking-wider"
-                  value={localModule.moduleType}
-                  onChange={(e) => updateLocal({ moduleType: e.target.value })}
-                >
-                  <option value="Exam">Exam</option>
-                  <option value="Portfolio">Portfolio</option>
-                  <option value="Assessment Only">Assessment Only</option>
-                </select>
+                <>
+                  <select 
+                    className="bg-slate-50 border-none rounded-xl text-xs font-bold py-2 px-4 focus:ring-0 text-slate-500 uppercase tracking-wider"
+                    value={localModule.moduleType}
+                    onChange={(e) => updateLocal({ moduleType: e.target.value })}
+                  >
+                    <option value="Exam">Exam</option>
+                    <option value="Portfolio">Portfolio</option>
+                    <option value="Assessment Only">Assessment Only</option>
+                  </select>
+                  <button
+                    onClick={() => updateLocal({ isLanguage: !localModule.isLanguage })}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                      localModule.isLanguage 
+                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' 
+                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                    }`}
+                  >
+                    <Languages size={14} />
+                    {localModule.isLanguage ? 'Language Module' : 'Not a Language'}
+                  </button>
+                </>
               ) : (
-                <span className="bg-indigo-50 text-indigo-600 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-                  {module.moduleType}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                    module.moduleType === 'Exam' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                    module.moduleType === 'Portfolio' ? 'bg-blue-50 text-blue-600 border border-blue-100' :
+                    'bg-slate-50 text-slate-600 border border-slate-100'
+                  }`}>
+                    {module.moduleType === 'Exam' && <GraduationCap size={12} />}
+                    {module.moduleType === 'Portfolio' && <Briefcase size={12} />}
+                    {module.moduleType === 'Assessment Only' && <ClipboardCheck size={12} />}
+                    {module.moduleType}
+                  </span>
+                  {isLanguageModule(module) && (
+                    <span className="bg-emerald-50 text-emerald-600 border border-emerald-100 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5">
+                      <Languages size={10} />
+                      Language
+                    </span>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -6241,45 +8658,53 @@ function ModuleCard({ module, profile, modules, schedule, onUpdate, onAddAssessm
         </div>
       </div>
 
-      {/* AI Overview Section */}
-      <div className="px-8 py-6 bg-indigo-50/30 border-b border-slate-100">
-        <div className="flex items-center justify-between mb-3">
-          <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
-            <Sparkles size={12} className="text-indigo-500" />
-            AI Module Overview
-          </h4>
-          <button 
-            onClick={generateAIOverview}
-            disabled={isGeneratingOverview}
-            className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 disabled:opacity-50 flex items-center gap-1 transition-colors"
-          >
-            {isGeneratingOverview ? <RotateCcw size={10} className="animate-spin" /> : <Sparkles size={10} />}
-            {module.aiOverview ? 'Regenerate' : 'Generate Overview'}
-          </button>
-        </div>
-        
-        {isGeneratingOverview ? (
-          <div className="flex items-center gap-3 py-2">
-            <div className="flex gap-1">
-              {[0, 1, 2].map(i => (
-                <motion.div 
-                  key={i}
-                  animate={{ opacity: [0.3, 1, 0.3] }}
-                  transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }}
-                  className="w-1.5 h-1.5 bg-indigo-400 rounded-full"
-                />
-              ))}
+      {/* AI Overview Section - Hide in detailed view as it's redundant with Summary tab */}
+      {!isDetailed && (
+        <div className="px-8 py-6 bg-indigo-50/30 border-b border-slate-100">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
+              <Sparkles size={12} className="text-indigo-500" />
+              AI Module Overview
+            </h4>
+            <button 
+              onClick={generateAIOverview}
+              disabled={isGeneratingOverview}
+              className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 disabled:opacity-50 flex items-center gap-1 transition-colors"
+            >
+              {isGeneratingOverview ? <RotateCcw size={10} className="animate-spin" /> : <Sparkles size={10} />}
+              {module.aiOverview ? 'Regenerate' : 'Generate Overview'}
+            </button>
+          </div>
+          
+          {error && (
+            <div className="mb-4">
+              <AIErrorMessage message={error} onRetry={generateAIOverview} />
             </div>
-            <span className="text-xs text-slate-400 italic">AI is analyzing your module...</span>
-          </div>
-        ) : module.aiOverview ? (
-          <div className="prose prose-sm max-w-none text-slate-600 leading-relaxed">
-            <Markdown>{module.aiOverview}</Markdown>
-          </div>
-        ) : (
-          <p className="text-xs text-slate-400 italic">No overview generated yet. Click "Generate Overview" to get AI insights.</p>
-        )}
-      </div>
+          )}
+
+          {isGeneratingOverview ? (
+            <div className="flex items-center gap-3 py-2">
+              <div className="flex gap-1">
+                {[0, 1, 2].map(i => (
+                  <motion.div 
+                    key={i}
+                    animate={{ opacity: [0.3, 1, 0.3] }}
+                    transition={{ repeat: Infinity, duration: 1, delay: i * 0.2 }}
+                    className="w-1.5 h-1.5 bg-indigo-400 rounded-full"
+                  />
+                ))}
+              </div>
+              <span className="text-xs text-slate-400 italic">AI is analyzing your module...</span>
+            </div>
+          ) : module.aiOverview ? (
+            <div className="prose prose-sm max-w-none text-slate-600 leading-relaxed">
+              <Markdown>{module.aiOverview}</Markdown>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400 italic">No overview generated yet. Click "Generate Overview" to get AI insights.</p>
+          )}
+        </div>
+      )}
 
       <div className="p-8 bg-slate-50/30">
         <div className="flex items-center justify-between mb-6">
@@ -6493,324 +8918,327 @@ function ModuleCard({ module, profile, modules, schedule, onUpdate, onAddAssessm
         </div>
       </div>
       
-      {/* YouTube Resources Section */}
-      <div className="px-8 py-6 bg-red-50/20 border-b border-slate-100">
-        <div className="flex items-center justify-between mb-4">
-          <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
-            <Youtube size={12} className="text-red-500" />
-            YouTube Study Resources
-          </h4>
-        </div>
+      {/* YouTube Resources Section - Hide in detailed view as it's redundant with YouTube tab */}
+      {!isDetailed && (
+        <div className="px-8 py-6 bg-red-50/20 border-b border-slate-100">
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
+              <Youtube size={12} className="text-red-500" />
+              YouTube Study Resources
+            </h4>
+          </div>
 
-        <div className="flex gap-2 mb-4">
-          <input 
-            className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs focus:ring-1 focus:ring-indigo-500 transition-all"
-            placeholder="Paste YouTube URL..."
-            value={ytUrl}
-            onChange={(e) => setYtUrl(e.target.value)}
-          />
-          <button 
-            onClick={handleAddYtVideo}
-            disabled={isProcessingYt || !ytUrl.trim()}
-            className="bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-700 transition-all disabled:opacity-50 flex items-center gap-2"
-          >
-            {isProcessingYt ? <RotateCcw className="animate-spin" size={12} /> : <Plus size={12} />}
-            {isProcessingYt ? 'Processing...' : 'Add'}
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {module.youtubeVideos?.map((video) => (
+          <div className="flex gap-2 mb-4">
+            <input 
+              className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs focus:ring-1 focus:ring-indigo-500 transition-all"
+              placeholder="Paste YouTube URL..."
+              value={ytUrl}
+              onChange={(e) => setYtUrl(e.target.value)}
+            />
             <button 
-              key={video.id}
-              onClick={() => setActiveYtVideo(video)}
-              className="flex items-start gap-3 p-3 bg-white border border-slate-100 rounded-xl hover:border-red-200 hover:bg-red-50/30 transition-all text-left group/yt"
+              onClick={handleAddYtVideo}
+              disabled={isProcessingYt || !ytUrl.trim()}
+              className="bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-700 transition-all disabled:opacity-50 flex items-center gap-2"
             >
-              <div className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center text-red-500 shrink-0 group-hover/yt:bg-red-500 group-hover/yt:text-white transition-colors">
-                <Youtube size={16} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-slate-700 truncate">{video.title}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">{video.summary}</p>
-              </div>
+              {isProcessingYt ? <RotateCcw className="animate-spin" size={12} /> : <Plus size={12} />}
+              {isProcessingYt ? 'Processing...' : 'Add'}
             </button>
-          ))}
-          {!module.youtubeVideos?.length && (
-            <div className="col-span-full py-4 text-center">
-              <p className="text-[10px] text-slate-400 italic">No YouTube resources added yet.</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="p-8 border-t border-slate-100 bg-indigo-50/20">
-        <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-6">Grade Weighting & Calculations</h4>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="space-y-2">
-            <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Year Mark Weight (%)</label>
-            {isEditing ? (
-              <input 
-                type="number" 
-                className="w-full bg-white border border-slate-200 rounded-xl text-sm py-2 px-3 focus:ring-1 focus:ring-indigo-500" 
-                value={localModule.yearMarkWeight || ''} 
-                onChange={(e) => updateLocal({ yearMarkWeight: parseInt(e.target.value) })}
-                placeholder="e.g. 40"
-              />
-            ) : (
-              <p className="text-sm font-bold text-slate-700">{module.yearMarkWeight || 0}%</p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Exam Weight (%)</label>
-            {isEditing ? (
-              <input 
-                type="number" 
-                className="w-full bg-white border border-slate-200 rounded-xl text-sm py-2 px-3 focus:ring-1 focus:ring-indigo-500" 
-                value={localModule.examWeight || ''} 
-                onChange={(e) => updateLocal({ examWeight: parseInt(e.target.value) })}
-                placeholder="e.g. 60"
-              />
-            ) : (
-              <p className="text-sm font-bold text-slate-700">{module.examWeight || 0}%</p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Exam/Portfolio Mark (%)</label>
-            {isEditing ? (
-              <input 
-                type="number" 
-                className="w-full bg-white border border-slate-200 rounded-xl text-sm py-2 px-3 focus:ring-1 focus:ring-indigo-500" 
-                value={localModule.examMark || ''} 
-                onChange={(e) => updateLocal({ examMark: parseInt(e.target.value) })}
-                placeholder="e.g. 75"
-              />
-            ) : (
-              <p className="text-sm font-bold text-emerald-600">{module.examMark || 0}%</p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Pass Mark (%)</label>
-            {isEditing ? (
-              <input 
-                type="number" 
-                className="w-full bg-white border border-slate-200 rounded-xl text-sm py-2 px-3 focus:ring-1 focus:ring-indigo-500" 
-                value={localModule.passMark ?? profile?.defaultPassMark ?? 50} 
-                onChange={(e) => updateLocal({ passMark: parseInt(e.target.value) })}
-                placeholder="e.g. 50"
-              />
-            ) : (
-              <p className="text-sm font-bold text-slate-700">{module.passMark ?? profile?.defaultPassMark ?? 50}%</p>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white p-4 rounded-2xl border border-indigo-100 shadow-sm flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Calculated Year Mark</p>
-              <p className="text-xl font-bold text-indigo-600">
-                {(() => {
-                  const assessments = isEditing ? localModule.assessments : module.assessments;
-                  const totalWeight = assessments.reduce((acc: number, a: any) => acc + (a.weight || 0), 0);
-                  if (totalWeight === 0) return '0%';
-                  const yearMark = assessments.reduce((acc: number, a: any) => acc + ((a.markReceived || 0) * (a.weight || 0)), 0) / totalWeight;
-                  return `${yearMark.toFixed(1)}%`;
-                })()}
-              </p>
-            </div>
-            <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center">
-              <BookOpen size={20} className="text-indigo-600" />
-            </div>
-          </div>
-          
-          <div className="bg-white p-4 rounded-2xl border border-amber-100 shadow-sm flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Required in Exam to Pass</p>
-              <p className="text-xl font-bold text-amber-600">
-                {(() => {
-                  const assessments = isEditing ? localModule.assessments : module.assessments;
-                  const totalWeight = assessments.reduce((acc: number, a: any) => acc + (a.weight || 0), 0);
-                  const yearMark = totalWeight === 0 ? 0 : assessments.reduce((acc: number, a: any) => acc + ((a.markReceived || 0) * (a.weight || 0)), 0) / totalWeight;
-                  
-                  const yWeight = (isEditing ? localModule.yearMarkWeight : module.yearMarkWeight) || 0;
-                  const eWeight = (isEditing ? localModule.examWeight : module.examWeight) || 0;
-                  const pMark = (isEditing ? localModule.passMark : module.passMark) ?? profile?.defaultPassMark ?? 50;
-                  
-                  const currentContribution = (yearMark * yWeight / 100);
-                  const needed = pMark - currentContribution;
-                  
-                  if (needed <= 0) return 'Passed!';
-                  if (eWeight === 0) return 'N/A';
-                  
-                  const requiredExam = (needed / eWeight) * 100;
-                  return requiredExam > 100 ? 'Impossible' : `${requiredExam.toFixed(1)}%`;
-                })()}
-              </p>
-            </div>
-            <div className="w-10 h-10 bg-amber-50 rounded-full flex items-center justify-center">
-              <AlertCircle size={20} className="text-amber-600" />
-            </div>
           </div>
 
-          <div className="bg-indigo-600 p-4 rounded-2xl shadow-lg shadow-indigo-100 flex items-center justify-between text-white">
-            <div>
-              <p className="text-[10px] font-bold uppercase text-indigo-200 tracking-widest">Final Module Mark</p>
-              <p className="text-xl font-bold">
-                {(() => {
-                  const assessments = isEditing ? localModule.assessments : module.assessments;
-                  const totalWeight = assessments.reduce((acc: number, a: any) => acc + (a.weight || 0), 0);
-                  const yearMark = totalWeight === 0 ? 0 : assessments.reduce((acc: number, a: any) => acc + ((a.markReceived || 0) * (a.weight || 0)), 0) / totalWeight;
-                  
-                  const yWeight = (isEditing ? localModule.yearMarkWeight : module.yearMarkWeight) || 0;
-                  const eWeight = (isEditing ? localModule.examWeight : module.examWeight) || 0;
-                  const eMark = (isEditing ? localModule.examMark : module.examMark) || 0;
-                  
-                  const finalMark = (yearMark * yWeight / 100) + (eMark * eWeight / 100);
-                  return `${finalMark.toFixed(1)}%`;
-                })()}
-              </p>
-            </div>
-            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-              <Award size={20} className="text-white" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-8 border-t border-slate-100 bg-white">
-        <div 
-          onClick={() => setIsUnitsOpen(!isUnitsOpen)}
-          className="w-full flex items-center justify-between mb-2 group/header cursor-pointer"
-        >
-          <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400 group-hover/header:text-indigo-600 transition-colors">Module Units</h4>
-          <div className="flex items-center gap-4">
-            {isEditing && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {module.youtubeVideos?.map((video) => (
               <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const newUnit = { id: Math.random().toString(36).substr(2, 9), unitNumber: '', name: '', completed: false };
-                  updateLocal({ units: [...(localModule.units || []), newUnit] });
-                  setIsUnitsOpen(true);
-                }} 
-                className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                key={video.id}
+                onClick={() => setActiveYtVideo(video)}
+                className="flex items-start gap-3 p-3 bg-white border border-slate-100 rounded-xl hover:border-red-200 hover:bg-red-50/30 transition-all text-left group/yt"
               >
-                <Plus size={14} /> Add Unit
+                <div className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center text-red-500 shrink-0 group-hover/yt:bg-red-500 group-hover/yt:text-white transition-colors">
+                  <Youtube size={16} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-slate-700 truncate">{video.title}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">{video.summary}</p>
+                </div>
               </button>
+            ))}
+            {!module.youtubeVideos?.length && (
+              <div className="col-span-full py-4 text-center">
+                <p className="text-[10px] text-slate-400 italic">No YouTube resources added yet.</p>
+              </div>
             )}
-            <ChevronDown size={16} className={`text-slate-400 transition-transform ${isUnitsOpen ? 'rotate-180' : ''}`} />
           </div>
         </div>
+      )}
 
-        <AnimatePresence>
-          {isUnitsOpen && (
-            <motion.div 
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="overflow-hidden"
-            >
-              <div className="space-y-3 pt-4">
-                {(isEditing ? localModule.units : module.units)?.map((unit: any, idx: number) => (
-                  <div key={unit.id} className="flex items-center gap-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-100 group/unit">
-                    <button 
-                      onClick={() => {
-                        const newUnits = [...(isEditing ? localModule.units : module.units)];
-                        newUnits[idx].completed = !newUnits[idx].completed;
-                        if (isEditing) {
-                          updateLocal({ units: newUnits });
-                        } else {
-                          onUpdate({ units: newUnits });
-                        }
-                      }}
-                      className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
-                        unit.completed 
-                          ? 'bg-emerald-500 border-emerald-500 text-white' 
-                          : 'border-slate-200 hover:border-indigo-400 bg-white'
-                      }`}
-                    >
-                      {unit.completed && <Check size={14} strokeWidth={3} />}
-                    </button>
-                    <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-                      <div className="md:col-span-2">
-                        <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest mb-1 block">Unit #</label>
-                        {isEditing ? (
-                          <input 
-                            className="w-full bg-white border border-slate-200 rounded-xl text-sm py-2 px-3 focus:ring-1 focus:ring-indigo-500" 
-                            value={unit.unitNumber} 
-                            onChange={(e) => {
-                              const newUnits = [...(localModule.units || [])];
-                              newUnits[idx].unitNumber = e.target.value;
-                              updateLocal({ units: newUnits });
-                            }}
-                            placeholder="e.g. 1"
-                          />
-                        ) : (
-                          <p className={`text-sm font-bold ${unit.completed ? 'text-emerald-600' : 'text-slate-700'}`}>
-                            {unit.unitNumber ? `Unit ${unit.unitNumber}` : '-'}
-                          </p>
-                        )}
-                      </div>
-                      <div className="md:col-span-10">
-                        <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest mb-1 block">Unit Name</label>
-                        {isEditing ? (
-                          <input 
-                            className="w-full bg-white border border-slate-200 rounded-xl text-sm py-2 px-3 focus:ring-1 focus:ring-indigo-500" 
-                            value={unit.name} 
-                            onChange={(e) => {
-                              const newUnits = [...(localModule.units || [])];
-                              newUnits[idx].name = e.target.value;
-                              updateLocal({ units: newUnits });
-                            }}
-                            placeholder="Unit Name"
-                          />
-                        ) : (
-                          <p className={`text-sm font-medium ${unit.completed ? 'text-slate-400 line-through' : 'text-slate-600'}`}>
-                            {unit.name || 'Unnamed Unit'}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    {isEditing && (
+      {/* Grade Weighting Section - Hide in detailed view as it will be moved to a tab */}
+      {!isDetailed && (
+        <div className="p-8 border-t border-slate-100 bg-indigo-50/20">
+          <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-6">Grade Weighting & Calculations</h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Year Mark Weight (%)</label>
+              {isEditing ? (
+                <input 
+                  type="number" 
+                  className="w-full bg-white border border-slate-200 rounded-xl text-sm py-2 px-3 focus:ring-1 focus:ring-indigo-500" 
+                  value={localModule.yearMarkWeight || ''} 
+                  onChange={(e) => updateLocal({ yearMarkWeight: parseInt(e.target.value) })}
+                  placeholder="e.g. 40"
+                />
+              ) : (
+                <p className="text-sm font-bold text-slate-700">{module.yearMarkWeight || 0}%</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Exam Weight (%)</label>
+              {isEditing ? (
+                <input 
+                  type="number" 
+                  className="w-full bg-white border border-slate-200 rounded-xl text-sm py-2 px-3 focus:ring-1 focus:ring-indigo-500" 
+                  value={localModule.examWeight || ''} 
+                  onChange={(e) => updateLocal({ examWeight: parseInt(e.target.value) })}
+                  placeholder="e.g. 60"
+                />
+              ) : (
+                <p className="text-sm font-bold text-slate-700">{module.examWeight || 0}%</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Exam/Portfolio Mark (%)</label>
+              {isEditing ? (
+                <input 
+                  type="number" 
+                  className="w-full bg-white border border-slate-200 rounded-xl text-sm py-2 px-3 focus:ring-1 focus:ring-indigo-500" 
+                  value={localModule.examMark || ''} 
+                  onChange={(e) => updateLocal({ examMark: parseInt(e.target.value) })}
+                  placeholder="e.g. 75"
+                />
+              ) : (
+                <p className="text-sm font-bold text-emerald-600">{module.examMark || 0}%</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Pass Mark (%)</label>
+              {isEditing ? (
+                <input 
+                  type="number" 
+                  className="w-full bg-white border border-slate-200 rounded-xl text-sm py-2 px-3 focus:ring-1 focus:ring-indigo-500" 
+                  value={localModule.passMark ?? profile?.defaultPassMark ?? 50} 
+                  onChange={(e) => updateLocal({ passMark: parseInt(e.target.value) })}
+                  placeholder="e.g. 50"
+                />
+              ) : (
+                <p className="text-sm font-bold text-slate-700">{module.passMark ?? profile?.defaultPassMark ?? 50}%</p>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white p-4 rounded-2xl border border-indigo-100 shadow-sm flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Calculated Year Mark</p>
+                <p className="text-xl font-bold text-indigo-600">
+                  {(() => {
+                    const assessments = isEditing ? localModule.assessments : module.assessments;
+                    const totalWeight = assessments.reduce((acc: number, a: any) => acc + (a.weight || 0), 0);
+                    if (totalWeight === 0) return '0%';
+                    const yearMark = assessments.reduce((acc: number, a: any) => acc + ((a.markReceived || 0) * (a.weight || 0)), 0) / totalWeight;
+                    return `${yearMark.toFixed(1)}%`;
+                  })()}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center">
+                <BookOpen size={20} className="text-indigo-600" />
+              </div>
+            </div>
+            
+            <div className="bg-white p-4 rounded-2xl border border-amber-100 shadow-sm flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Required in Exam to Pass</p>
+                <p className="text-xl font-bold text-amber-600">
+                  {(() => {
+                    const assessments = isEditing ? localModule.assessments : module.assessments;
+                    const totalWeight = assessments.reduce((acc: number, a: any) => acc + (a.weight || 0), 0);
+                    const yearMark = totalWeight === 0 ? 0 : assessments.reduce((acc: number, a: any) => acc + ((a.markReceived || 0) * (a.weight || 0)), 0) / totalWeight;
+                    
+                    const yWeight = (isEditing ? localModule.yearMarkWeight : module.yearMarkWeight) || 0;
+                    const eWeight = (isEditing ? localModule.examWeight : module.examWeight) || 0;
+                    const pMark = (isEditing ? localModule.passMark : module.passMark) ?? profile?.defaultPassMark ?? 50;
+                    
+                    const currentContribution = (yearMark * yWeight / 100);
+                    const needed = pMark - currentContribution;
+                    
+                    if (needed <= 0) return 'Passed!';
+                    if (eWeight === 0) return 'N/A';
+                    
+                    const requiredExam = (needed / eWeight) * 100;
+                    return requiredExam > 100 ? 'Impossible' : `${requiredExam.toFixed(1)}%`;
+                  })()}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-amber-50 rounded-full flex items-center justify-center">
+                <AlertCircle size={20} className="text-amber-600" />
+              </div>
+            </div>
+
+            <div className="bg-indigo-600 p-4 rounded-2xl shadow-lg shadow-indigo-100 flex items-center justify-between text-white">
+              <div>
+                <p className="text-[10px] font-bold uppercase text-indigo-200 tracking-widest">Final Module Mark</p>
+                <p className="text-xl font-bold">
+                  {(() => {
+                    const assessments = isEditing ? localModule.assessments : module.assessments;
+                    const totalWeight = assessments.reduce((acc: number, a: any) => acc + (a.weight || 0), 0);
+                    const yearMark = totalWeight === 0 ? 0 : assessments.reduce((acc: number, a: any) => acc + ((a.markReceived || 0) * (a.weight || 0)), 0) / totalWeight;
+                    
+                    const yWeight = (isEditing ? localModule.yearMarkWeight : module.yearMarkWeight) || 0;
+                    const eWeight = (isEditing ? localModule.examWeight : module.examWeight) || 0;
+                    const eMark = (isEditing ? localModule.examMark : module.examMark) || 0;
+                    
+                    const finalMark = (yearMark * yWeight / 100) + (eMark * eWeight / 100);
+                    return `${finalMark.toFixed(1)}%`;
+                  })()}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                <Award size={20} className="text-white" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Module Units Section - Hide in detailed view as it's redundant with Units & Notes tab */}
+      {!isDetailed && (
+        <div className="p-8 border-t border-slate-100 bg-white">
+          <div 
+            onClick={() => setIsUnitsOpen(!isUnitsOpen)}
+            className="w-full flex items-center justify-between mb-2 group/header cursor-pointer"
+          >
+            <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400 group-hover/header:text-indigo-600 transition-colors">Module Units</h4>
+            <div className="flex items-center gap-4">
+              {isEditing && (
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const newUnit = { id: Math.random().toString(36).substr(2, 9), unitNumber: '', name: '', completed: false };
+                    updateLocal({ units: [...(localModule.units || []), newUnit] });
+                    setIsUnitsOpen(true);
+                  }} 
+                  className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                >
+                  <Plus size={14} /> Add Unit
+                </button>
+              )}
+              <ChevronDown size={16} className={`text-slate-400 transition-transform ${isUnitsOpen ? 'rotate-180' : ''}`} />
+            </div>
+          </div>
+
+          <AnimatePresence>
+            {isUnitsOpen && (
+              <motion.div 
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="space-y-3 pt-4">
+                  {(isEditing ? localModule.units : module.units)?.map((unit: any, idx: number) => (
+                    <div key={unit.id} className="flex items-center gap-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-100 group/unit">
                       <button 
                         onClick={() => {
-                          onConfirm(
-                            "Delete Unit",
-                            `Are you sure you want to delete Unit ${unit.unitNumber || idx + 1}?`,
-                            () => {
-                              const newUnits = localModule.units.filter((_: any, i: number) => i !== idx);
-                              updateLocal({ units: newUnits });
-                            }
-                          );
+                          const newUnits = [...(isEditing ? localModule.units : module.units)];
+                          newUnits[idx].completed = !newUnits[idx].completed;
+                          if (isEditing) {
+                            updateLocal({ units: newUnits });
+                          } else {
+                            onUpdate({ units: newUnits });
+                          }
                         }}
-                        className="p-2 text-slate-300 hover:text-red-600 transition-colors opacity-0 group-hover/unit:opacity-100"
+                        className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
+                          unit.completed 
+                            ? 'bg-emerald-500 border-emerald-500 text-white' 
+                            : 'border-slate-200 hover:border-indigo-400 bg-white'
+                        }`}
                       >
-                        <Trash2 size={16} />
+                        {unit.completed && <Check size={14} strokeWidth={3} />}
                       </button>
-                    )}
-                  </div>
-                ))}
-                {(!module.units || module.units.length === 0) && !isEditing && (
-                  <p className="text-center py-4 text-slate-400 text-sm italic">No units added yet.</p>
-                )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {isDetailed && (
-          <>
-            <VideoExplanationGenerator module={module} />
-            <StudyMaterials 
-              module={module} 
-              onUpdate={(updates) => onUpdate(updates)} 
-              profile={profile}
-              modules={modules}
-              schedule={schedule}
-              onConfirm={onConfirm}
-            />
-          </>
-        )}
-      </div>
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                        <div className="md:col-span-2">
+                          <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest mb-1 block">Unit #</label>
+                          {isEditing ? (
+                            <input 
+                              className="w-full bg-white border border-slate-200 rounded-xl text-sm py-2 px-3 focus:ring-1 focus:ring-indigo-500" 
+                              value={unit.unitNumber} 
+                              onChange={(e) => {
+                                const newUnits = [...(localModule.units || [])];
+                                newUnits[idx].unitNumber = e.target.value;
+                                updateLocal({ units: newUnits });
+                              }}
+                              placeholder="e.g. 1"
+                            />
+                          ) : (
+                            <p className={`text-sm font-bold ${unit.completed ? 'text-emerald-600' : 'text-slate-700'}`}>
+                              {unit.unitNumber ? `Unit ${unit.unitNumber}` : '-'}
+                            </p>
+                          )}
+                        </div>
+                        <div className="md:col-span-10">
+                          <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest mb-1 block">Unit Name</label>
+                          {isEditing ? (
+                            <input 
+                              className="w-full bg-white border border-slate-200 rounded-xl text-sm py-2 px-3 focus:ring-1 focus:ring-indigo-500" 
+                              value={unit.name} 
+                              onChange={(e) => {
+                                const newUnits = [...(localModule.units || [])];
+                                newUnits[idx].name = e.target.value;
+                                updateLocal({ units: newUnits });
+                              }}
+                              placeholder="Unit Name"
+                            />
+                          ) : (
+                            <div className="flex items-center justify-between">
+                              <p className={`text-sm font-medium ${unit.completed ? 'text-slate-400 line-through' : 'text-slate-600'}`}>
+                                {unit.name || 'Unnamed Unit'}
+                              </p>
+                              <div className="flex items-center gap-2">
+                                {unit.notes && <div title="Has Notes"><FileText size={12} className="text-indigo-400" /></div>}
+                                {unit.resources?.length > 0 && <div title={`${unit.resources.length} Resources`}><Paperclip size={12} className="text-emerald-400" /></div>}
+                                {unit.flashcards?.length > 0 && <div title={`${unit.flashcards.length} Flashcards`}><Layers size={12} className="text-amber-400" /></div>}
+                                {unit.quiz && <div title="Has Quiz"><HelpCircle size={12} className="text-pink-400" /></div>}
+                                {unit.practiceExams?.length > 0 && <div title={`${unit.practiceExams.length} Practice Exams`}><Award size={12} className="text-indigo-400" /></div>}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {isEditing && (
+                        <button 
+                          onClick={() => {
+                            onConfirm(
+                              "Delete Unit",
+                              `Are you sure you want to delete Unit ${unit.unitNumber || idx + 1}?`,
+                              () => {
+                                const newUnits = localModule.units.filter((_: any, i: number) => i !== idx);
+                                updateLocal({ units: newUnits });
+                              }
+                            );
+                          }}
+                          className="p-2 text-slate-300 hover:text-red-600 transition-colors opacity-0 group-hover/unit:opacity-100"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {(!module.units || module.units.length === 0) && !isEditing && (
+                    <p className="text-center py-4 text-slate-400 text-sm italic">No units added yet.</p>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
 
       {/* YouTube Video Player Modal */}
       <AnimatePresence>
@@ -7024,7 +9452,7 @@ function ScheduleModal({ item, modules, onClose, onSave }: any) {
         className="bg-white w-full max-w-lg rounded-[2.5rem] p-10 shadow-2xl"
       >
         <div className="flex items-center justify-between mb-8">
-          <h2 className="text-2xl font-bold">{item ? 'Edit Session' : 'Add New Session'}</h2>
+          <h2 className="text-2xl font-bold">{item?.id ? 'Edit Session' : 'Add New Session'}</h2>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-xl transition-all">
             <X size={24} />
           </button>
@@ -7098,7 +9526,7 @@ function ScheduleModal({ item, modules, onClose, onSave }: any) {
               type="submit"
               className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all"
             >
-              {item ? 'Save Changes' : 'Add Session'}
+              {item?.id ? 'Save Changes' : 'Add Session'}
             </button>
           </div>
         </form>
@@ -7212,7 +9640,7 @@ function CalendarView({ schedule, modules, onEdit }: any) {
   );
 }
 
-function TimetableView({ schedule, modules, onExport, onGenerate, isGenerating, onAdd, onEdit, onDelete }: any) {
+function TimetableView({ schedule, modules, onExport, onGenerate, isGenerating, error, onAdd, onEdit, onDelete, onUpdate }: any) {
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [now, setNow] = useState(new Date());
 
@@ -7226,10 +9654,28 @@ function TimetableView({ schedule, modules, onExport, onGenerate, isGenerating, 
     .filter((item: any) => isAfter(item.start, now) || isSameDay(item.start, today))
     .sort((a: any, b: any) => a.start.getTime() - b.start.getTime());
 
+  const completedCount = filteredSchedule.filter((s: any) => s.completed).length;
+  const totalCount = filteredSchedule.length;
+  const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <h2 className="text-2xl font-bold">Your Timetable</h2>
+        <div className="flex items-center gap-4">
+          <h2 className="text-2xl font-bold">Study Planner</h2>
+          {totalCount > 0 && (
+            <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-2xl border border-slate-100 shadow-sm">
+              <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progressPercent}%` }}
+                  className="h-full bg-emerald-500"
+                />
+              </div>
+              <span className="text-xs font-bold text-emerald-600">{progressPercent}% Done</span>
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-4">
           <div className="bg-white p-1 rounded-xl border border-slate-100 flex shadow-sm">
             <button 
@@ -7261,84 +9707,153 @@ function TimetableView({ schedule, modules, onExport, onGenerate, isGenerating, 
               {isGenerating ? (
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               ) : (
-                <RotateCcw size={18} />
+                <Sparkles size={18} />
               )}
-              {isGenerating ? 'Generating...' : 'Auto Generate'}
+              {isGenerating ? 'Planning...' : 'AI Smart Plan'}
             </button>
             <ExportMenu onExport={onExport} />
           </div>
         </div>
       </div>
 
-      {viewMode === 'calendar' ? (
-        <CalendarView schedule={schedule} modules={modules} onEdit={onEdit} />
-      ) : (
-        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
-          <div className="divide-y divide-slate-100">
-            {filteredSchedule.length === 0 ? (
-              <div className="px-8 py-12 text-center">
-                <Calendar className="mx-auto text-slate-200 mb-4" size={48} />
-                <p className="text-slate-400 font-medium">No upcoming sessions. Generate a new timetable to get started!</p>
-              </div>
-            ) : (
-              filteredSchedule.map((item: any, idx: number) => {
-                const prevItem = filteredSchedule[idx - 1];
-                const showDateHeader = !prevItem || !isSameDay(item.start, prevItem.start);
-                return (
-                  <React.Fragment key={item.id}>
-                    {showDateHeader && (
-                      <div className="bg-slate-50 px-8 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                        {isToday(item.start) ? 'Today' : isTomorrow(item.start) ? 'Tomorrow' : format(item.start, 'EEEE, MMMM do')}
-                      </div>
-                    )}
-                    <div className="px-8 py-5 flex items-center gap-6 hover:bg-slate-50 transition-all group">
-                      <div className="w-16 text-xs font-bold text-slate-400 font-mono">
-                        {format(item.start, 'HH:mm')}
-                      </div>
-                      <div className={`w-2.5 h-2.5 rounded-full ${
-                        item.type === 'exam' || item.type === 'exam_prep' ? 'bg-red-500' : 
-                        item.type === 'assessment_due' || item.type === 'assignment' ? 'bg-amber-500' : 
-                        item.type === 'portfolio' || item.type === 'portfolio_prep' ? 'bg-emerald-500' :
-                        'bg-indigo-500'
-                      }`} />
-                      <div className="flex-1">
-                        <p className="text-sm font-bold text-slate-800">{item.title}</p>
-                        <div className="flex items-center gap-2">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{item.type.replace('_', ' ')}</p>
-                          {item.moduleId && (
-                            <span className="text-[10px] text-indigo-600 font-bold">
-                              • {modules.find((m: any) => m.id === item.moduleId)?.title}
-                            </span>
-                          )}
-                        </div>
-                        {item.moduleId && (
-                          <p className="text-[9px] text-slate-400 font-medium mt-0.5 italic">
-                            {modules.find((m: any) => m.id === item.moduleId)?.units?.map((u: any) => u.name).filter(Boolean).join(' • ')}
-                          </p>
+      {error && (
+        <AIErrorMessage message={error} onRetry={onGenerate} />
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        <div className="lg:col-span-3">
+          {viewMode === 'calendar' ? (
+            <CalendarView schedule={schedule} modules={modules} onEdit={onEdit} />
+          ) : (
+            <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+              <div className="divide-y divide-slate-100">
+                {filteredSchedule.length === 0 ? (
+                  <div className="px-8 py-12 text-center">
+                    <Calendar className="mx-auto text-slate-200 mb-4" size={48} />
+                    <p className="text-slate-400 font-medium">No upcoming sessions. Use AI Smart Plan to generate a personalized study schedule!</p>
+                  </div>
+                ) : (
+                  filteredSchedule.map((item: any, idx: number) => {
+                    const prevItem = filteredSchedule[idx - 1];
+                    const showDateHeader = !prevItem || !isSameDay(item.start, prevItem.start);
+                    return (
+                      <React.Fragment key={item.id}>
+                        {showDateHeader && (
+                          <div className="bg-slate-50 px-8 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                            {isToday(item.start) ? 'Today' : isTomorrow(item.start) ? 'Tomorrow' : format(item.start, 'EEEE, MMMM do')}
+                          </div>
                         )}
-                      </div>
-                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                        <button 
-                          onClick={() => onEdit(item)}
-                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                        >
-                          <Edit3 size={16} />
-                        </button>
-                        <button 
-                          onClick={() => onDelete(item.id)}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  </React.Fragment>
-                );
-              })
-            )}
+                        <div className={`px-8 py-5 flex items-center gap-6 hover:bg-slate-50 transition-all group ${item.completed ? 'opacity-50' : ''}`}>
+                          <div className="w-16 text-xs font-bold text-slate-400 font-mono">
+                            {format(item.start, 'HH:mm')}
+                          </div>
+                          <button 
+                            onClick={() => onUpdate(item.id, { completed: !item.completed })}
+                            className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                              item.completed ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-200 hover:border-indigo-500'
+                            }`}
+                          >
+                            {item.completed && <Check size={14} />}
+                          </button>
+                          <div className={`w-2.5 h-2.5 rounded-full ${
+                            item.type === 'exam' || item.type === 'exam_prep' ? 'bg-red-500' : 
+                            item.type === 'assessment_due' || item.type === 'assignment' ? 'bg-amber-500' : 
+                            item.type === 'portfolio' || item.type === 'portfolio_prep' ? 'bg-emerald-500' :
+                            'bg-indigo-500'
+                          }`} />
+                          <div className="flex-1">
+                            <p className={`text-sm font-bold text-slate-800 ${item.completed ? 'line-through' : ''}`}>{item.title}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{item.type.replace('_', ' ')}</p>
+                              {item.moduleId && (
+                                <span className="text-[10px] text-indigo-600 font-bold">
+                                  • {modules.find((m: any) => m.id === item.moduleId)?.title}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                            <button 
+                              onClick={() => onEdit(item)}
+                              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                            >
+                              <Edit3 size={16} />
+                            </button>
+                            <button 
+                              onClick={() => onDelete(item.id)}
+                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      </React.Fragment>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+            <h3 className="font-bold text-sm uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
+              <AlertCircle size={16} className="text-amber-500" />
+              Upcoming Deadlines
+            </h3>
+            <div className="space-y-3">
+              {modules.flatMap(m => 
+                (m.assessments || []).map(a => ({ ...a, moduleTitle: m.title, moduleId: m.id }))
+              )
+              .filter(a => isAfter(new Date(a.dueDate), now))
+              .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+              .slice(0, 5)
+              .map(a => (
+                <div key={a.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                  <p className="text-xs font-bold text-slate-800 line-clamp-1">{a.title}</p>
+                  <p className="text-[10px] text-slate-400 font-medium mb-2">{a.moduleTitle}</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                      Due {format(new Date(a.dueDate), 'MMM d')}
+                    </span>
+                    <button 
+                      onClick={() => onAdd({
+                        title: `Work on ${a.title}`,
+                        type: 'assignment',
+                        moduleId: a.moduleId,
+                        start: new Date(),
+                        end: addMinutes(new Date(), 60)
+                      })}
+                      className="text-[10px] font-bold text-indigo-600 hover:underline"
+                    >
+                      Schedule
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {modules.length === 0 && <p className="text-xs text-slate-400 italic text-center py-4">No modules added yet.</p>}
+            </div>
+          </div>
+
+          <div className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100">
+            <h3 className="font-bold text-sm text-indigo-900 mb-2 flex items-center gap-2">
+              <Sparkles size={16} className="text-indigo-600" />
+              Smart Planning
+            </h3>
+            <p className="text-xs text-indigo-700/70 leading-relaxed mb-4">
+              Our AI considers your preferred study hours, availability, and assessment weights to create the perfect balance.
+            </p>
+            <button 
+              onClick={onGenerate}
+              disabled={isGenerating}
+              className="w-full bg-white text-indigo-600 py-3 rounded-xl font-bold text-xs shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2"
+            >
+              {isGenerating ? "Planning..." : "Update Smart Plan"}
+            </button>
           </div>
         </div>
-      )}
+      </div>
     </motion.div>
   );
 }
@@ -7548,13 +10063,18 @@ function SettingsView({ profile, onUpdate }: any) {
           if (testAudioRef.current) {
             testAudioRef.current.volume = voiceSettings.volume;
             testAudioRef.current.playbackRate = voiceSettings.speakingRate;
-            testAudioRef.current.play();
+            testAudioRef.current.play().catch(e => {
+              console.error("Audio playback error:", e);
+              setError("Failed to play voice sample. Please check your browser settings.");
+            });
           }
         }, 100);
+      } else {
+        throw new Error("AI failed to generate audio data.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error testing voice:", error);
-      setError("Failed to generate voice sample. Please try again.");
+      setError(`Failed to generate voice sample: ${error.message || 'Unknown error'}. Please try again.`);
     } finally {
       setIsTestingVoice(false);
     }

@@ -77,9 +77,15 @@
         "name": { "type": "string" },
         "moduleTitle": { "type": "string" },
         "studentLevel": { "type": "string" },
-        "members": { "type": "array", "items": { "type": "string" } }
+        "members": { "type": "array", "items": { "type": "string" } },
+        "inviteCode": { "type": "string", "description": "Unique code to join the community" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "avatarColor": { "type": "string" },
+        "pinnedMessages": { "type": "array", "items": { "type": "object" } },
+        "resources": { "type": "array", "items": { "type": "object" } }
       },
-      "required": ["id", "name", "moduleTitle"]
+      "required": ["id", "name", "moduleTitle", "inviteCode"]
     },
     "ChatMessage": {
       "title": "Chat Message",
