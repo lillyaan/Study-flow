@@ -1603,6 +1603,7 @@ function DashboardView({ profile, schedule, modules, onExport, setActiveTab, onG
 function ModulesView({ profile, modules, communities, schedule, onUpdate, onAddAssessment, onRemove, onConfirm }: any) {
   const [filter, setFilter] = useState<string>('all');
   const [moduleDetailTab, setModuleDetailTab] = useState<'ai_suite' | 'youtube' | 'live_lessons'>('ai_suite');
+  const [viewMode, setViewMode] = useState<'list' | 'translator'>('list');
 
   const filteredModules = filter === 'all' 
     ? modules 
@@ -1614,7 +1615,7 @@ function ModulesView({ profile, modules, communities, schedule, onUpdate, onAddA
         <div className="flex items-center gap-4">
           {filter !== 'all' && (
             <button 
-              onClick={() => setFilter('all')}
+              onClick={() => { setFilter('all'); setViewMode('list'); }}
               className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 hover:text-slate-600"
               title="Back to all modules"
             >
@@ -1622,15 +1623,33 @@ function ModulesView({ profile, modules, communities, schedule, onUpdate, onAddA
             </button>
           )}
           <h2 className="text-2xl font-bold">
-            {filter === 'all' ? 'Your Modules' : modules.find((m: any) => m.id === filter)?.title}
+            {filter === 'all' ? (viewMode === 'list' ? 'Your Modules' : 'Academic Translator') : modules.find((m: any) => m.id === filter)?.title}
           </h2>
         </div>
         
         <div className="flex items-center gap-3">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">View:</span>
+          {filter === 'all' && (
+            <div className="flex bg-white p-1 rounded-xl border border-slate-100 shadow-sm mr-2">
+              <button 
+                onClick={() => setViewMode('list')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${viewMode === 'list' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-100' : 'text-slate-500 hover:bg-slate-50'}`}
+              >
+                <BookOpen size={14} />
+                Modules
+              </button>
+              <button 
+                onClick={() => setViewMode('translator')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${viewMode === 'translator' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-100' : 'text-slate-500 hover:bg-slate-50'}`}
+              >
+                <Languages size={14} />
+                Translator
+              </button>
+            </div>
+          )}
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select:</span>
           <select 
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => { setFilter(e.target.value); setViewMode('list'); }}
             className="bg-white border border-slate-100 rounded-xl px-4 py-2 text-sm font-bold text-slate-600 shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all cursor-pointer"
           >
             <option value="all">All Modules</option>
@@ -1642,22 +1661,28 @@ function ModulesView({ profile, modules, communities, schedule, onUpdate, onAddA
       </div>
 
       <div className="grid grid-cols-1 gap-6">
-        {filteredModules.map((module: any) => (
-          <ModuleCard 
-            key={module.id} 
-            module={module} 
-            profile={profile}
-            modules={modules}
-            communities={communities}
-            schedule={schedule}
-            onUpdate={(u: any) => onUpdate(module.id, u)} 
-            onAddAssessment={() => onAddAssessment(module.id)}
-            onRemove={() => onRemove(module.id)}
-            onConfirm={onConfirm}
-            onViewDetails={() => setFilter(module.id)}
-            isDetailed={filter !== 'all'}
-          />
-        ))}
+        {filter === 'all' && viewMode === 'translator' ? (
+          <TranslatorView />
+        ) : (
+          <>
+            {filteredModules.map((module: any) => (
+              <ModuleCard 
+                key={module.id} 
+                module={module} 
+                profile={profile}
+                modules={modules}
+                communities={communities}
+                schedule={schedule}
+                onUpdate={(u: any) => onUpdate(module.id, u)} 
+                onAddAssessment={() => onAddAssessment(module.id)}
+                onRemove={() => onRemove(module.id)}
+                onConfirm={onConfirm}
+                onViewDetails={() => setFilter(module.id)}
+                isDetailed={filter !== 'all'}
+              />
+            ))}
+          </>
+        )}
         {filter !== 'all' && filteredModules[0] && (
           <div className="space-y-6">
             <div className="flex items-center gap-2 bg-white p-2 rounded-2xl border border-slate-100 shadow-sm overflow-x-auto no-scrollbar">
@@ -3258,7 +3283,7 @@ function TranslatorView({ module }: { module?: Module }) {
   ];
 
   const subjects = [
-    'General Academic', 'Natural Sciences', 'Social Sciences', 'Humanities', 'Law & Jurisprudence', 'Medicine & Health', 'Engineering & Tech', 'Business & Economics', 'Mathematics', 'Computer Science'
+    'General Academic', 'Natural Sciences', 'Social Sciences', 'Humanities', 'Law & Jurisprudence', 'Medicine & Health', 'Engineering & Tech', 'Business & Economics', 'Mathematics', 'Computer Science', 'Architecture', 'Agriculture', 'Environmental Science', 'Education', 'Psychology', 'Linguistics', 'Political Science', 'Theology'
   ];
 
   const handleTranslate = async () => {
@@ -3272,16 +3297,17 @@ function TranslatorView({ module }: { module?: Module }) {
     const performTranslation = async (): Promise<boolean> => {
       try {
         const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        const prompt = `You are a world-class academic translator specializing in ${subjectField}. 
+        const prompt = `You are a world-class academic translator specializing in ${subjectField}, with deep expertise in South African linguistic and educational standards. 
         Translate the following text from ${sourceLanguage === 'Auto-detect' ? 'its original language' : sourceLanguage} to ${targetLanguage}.
         
-        CRITICAL REQUIREMENTS FOR 100% ACCURACY:
-        1. ACADEMIC CONTEXT: Use formal, scholarly language appropriate for university-level research and publication.
-        2. TERMINOLOGY: Apply precise technical terms for the field of ${subjectField}. For South African languages (like isiZulu, Afrikaans, etc.), ensure that modern academic terminology is used correctly, avoiding colloquialisms.
-        3. CULTURAL NUANCE: Maintain the original meaning while respecting the linguistic conventions of ${targetLanguage}.
-        4. GRAMMAR & SYNTAX: Ensure flawless grammatical structure. The translation must read as if it were originally written by an academic in ${targetLanguage}.
+        CRITICAL REQUIREMENTS FOR ACADEMIC EXCELLENCE:
+        1. ACADEMIC CONTEXT: Use formal, scholarly language appropriate for university-level research, specifically adhering to the academic standards of South African higher education institutions (like UCT, Wits, UP, etc.).
+        2. TERMINOLOGY: Apply precise technical terms for the field of ${subjectField}. For South African languages (like isiZulu, isiXhosa, Afrikaans, etc.), ensure that modern academic terminology is used correctly, avoiding colloquialisms and using standard orthography.
+        3. CULTURAL NUANCE: Maintain the original meaning while respecting the linguistic conventions and academic tone of ${targetLanguage}.
+        4. GRAMMAR & SYNTAX: Ensure flawless grammatical structure. The translation must read as if it were originally written by a subject-matter expert in ${targetLanguage}.
         5. FORMATTING: Preserve all citations, mathematical notations, and structural formatting.
-        6. NO HALLUCINATIONS: If a term is untranslatable, keep the original term in brackets or provide the most accepted academic equivalent.
+        6. NO HALLUCINATIONS: If a term is untranslatable or lacks a standardized academic equivalent in ${targetLanguage}, keep the original term in brackets or provide the most accepted scholarly equivalent.
+        7. SOUTH AFRICAN FOCUS: If the target is a South African language, ensure the translation reflects the formal register used in South African textbooks and academic journals.
 
         TEXT TO TRANSLATE:
         ${text}`;
