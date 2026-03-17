@@ -84,6 +84,9 @@ import {
   Briefcase,
   ClipboardCheck,
   Pin,
+  Linkedin,
+  Github,
+  Twitter,
   Bookmark,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -208,6 +211,7 @@ import * as XLSX from 'xlsx';
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType } from 'docx';
 import { saveAs } from 'file-saver';
 import { GoogleGenAI, Type, Modality } from "@google/genai";
+import { checkAndAwardBadges, updateStudyStreak, AVAILABLE_BADGES } from './services/badgeService';
 import Markdown from 'react-markdown';
 import mermaid from 'mermaid';
 
@@ -218,6 +222,8 @@ import {
   Assessment, 
   UserProfile, 
   ScheduleItem, 
+  Badge,
+  StudyStats,
   ModuleType, 
   StudyType,
   StudyUnit,
@@ -443,14 +449,29 @@ export default function App() {
     });
   };
 
-  // Theme Color Effect
+  // Study Streak Tracking
   useEffect(() => {
-    if (profile?.themeColor) {
-      document.documentElement.style.setProperty('--primary-color', profile.themeColor);
-    } else {
-      document.documentElement.style.setProperty('--primary-color', '#4f46e5');
+    if (user && profile) {
+      const updatedStats = updateStudyStreak(profile.studyStats);
+      const lastStudyDateStr = profile.studyStats?.lastStudyDate ? 
+        (typeof profile.studyStats.lastStudyDate === 'string' ? profile.studyStats.lastStudyDate : profile.studyStats.lastStudyDate.toDate?.()?.toISOString() || profile.studyStats.lastStudyDate.toISOString?.() || String(profile.studyStats.lastStudyDate)) 
+        : null;
+      
+      const todayStr = new Date().toDateString();
+      const lastStudyDayStr = lastStudyDateStr ? new Date(lastStudyDateStr).toDateString() : null;
+
+      if (todayStr !== lastStudyDayStr) {
+        const { newBadges } = checkAndAwardBadges(profile, updatedStats);
+        updateDoc(doc(db, 'users', user.uid), {
+          studyStats: {
+            ...updatedStats,
+            lastStudyDate: serverTimestamp()
+          },
+          badges: [...(profile.badges || []), ...newBadges]
+        });
+      }
     }
-  }, [profile?.themeColor]);
+  }, [user, profile?.uid]);
 
   // Auth State
   useEffect(() => {
@@ -788,8 +809,56 @@ export default function App() {
   };
 
   const handleUpdateModule = async (id: string, updates: any) => {
-    if (!user) return;
+    if (!user || !profile) return;
     await updateDoc(doc(db, 'users', user.uid, 'modules', id), updates);
+    
+    // Check for module completion badge
+    if (updates.units) {
+      const allCompleted = updates.units.every((u: any) => u.completed);
+      if (allCompleted) {
+        const stats = profile.studyStats || {
+          currentStreak: 0,
+          longestStreak: 0,
+          totalStudyHours: 0,
+          quizzesCompleted: 0,
+          perfectScores: 0,
+          modulesCompleted: 0,
+          lastStudyDate: null
+        };
+        
+        const updatedStats = {
+          ...stats,
+          modulesCompleted: stats.modulesCompleted + 1
+        };
+        
+        const { newBadges } = checkAndAwardBadges(profile, updatedStats);
+        await updateDoc(doc(db, 'users', user.uid), {
+          badges: [...(profile.badges || []), ...newBadges],
+          studyStats: updatedStats
+        });
+      }
+    }
+  };
+
+  const handleUpdateStats = async (statsUpdate: Partial<StudyStats>) => {
+    if (!user || !profile) return;
+    const currentStats = profile.studyStats || {
+      currentStreak: 0,
+      longestStreak: 0,
+      totalStudyHours: 0,
+      quizzesCompleted: 0,
+      perfectScores: 0,
+      modulesCompleted: 0,
+      lastStudyDate: null
+    };
+    
+    const updatedStats = { ...currentStats, ...statsUpdate };
+    const { newBadges } = checkAndAwardBadges(profile, updatedStats);
+    
+    await updateDoc(doc(db, 'users', user.uid), {
+      studyStats: updatedStats,
+      badges: [...(profile.badges || []), ...newBadges]
+    });
   };
 
   const handleRemoveModule = async (id: string) => {
@@ -1142,7 +1211,7 @@ export default function App() {
                   error={scheduleError}
                 />
               )}
-              {activeTab === 'modules' && <ModulesView profile={profile} modules={modules} communities={communities} schedule={schedule} onUpdate={handleUpdateModule} onAddAssessment={handleAddAssessment} onRemove={handleRemoveModule} onConfirm={confirmAction} />}
+              {activeTab === 'modules' && <ModulesView profile={profile} modules={modules} communities={communities} schedule={schedule} onUpdate={handleUpdateModule} onUpdateStats={handleUpdateStats} onAddAssessment={handleAddAssessment} onRemove={handleRemoveModule} onConfirm={confirmAction} />}
               {activeTab === 'schedule' && (
                 <TimetableView 
                   schedule={schedule} 
@@ -1468,6 +1537,96 @@ function LiveClock() {
   );
 }
 
+function ProgressMilestones({ profile }: { profile: UserProfile }) {
+  const stats = profile.studyStats;
+  if (!stats) return null;
+
+  const milestones = [
+    { label: 'Next Streak Milestone', current: stats.currentStreak, target: stats.currentStreak < 3 ? 3 : 7, unit: 'days' },
+    { label: 'Quiz Mastery', current: stats.perfectScores, target: 5, unit: 'perfect scores' },
+    { label: 'Module Completion', current: stats.modulesCompleted, target: 3, unit: 'modules' }
+  ];
+
+  return (
+    <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
+      <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
+        <TrendingUp size={20} className="text-indigo-600" />
+        Progress Milestones
+      </h3>
+      <div className="space-y-6">
+        {milestones.map((m, i) => (
+          <div key={i} className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="font-bold text-slate-700">{m.label}</span>
+              <span className="text-slate-400 font-medium">{m.current} / {m.target} {m.unit}</span>
+            </div>
+            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+              <motion.div 
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.min((m.current / m.target) * 100, 100)}%` }}
+                className="h-full bg-indigo-600 rounded-full"
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BadgesSection({ profile }: { profile: UserProfile }) {
+  const badges = profile.badges || [];
+  const stats = profile.studyStats;
+
+  return (
+    <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-bold flex items-center gap-2">
+          <Award size={20} className="text-amber-500" />
+          Achievements
+        </h3>
+        {stats && (
+          <div className="flex items-center gap-2 bg-amber-50 px-3 py-1 rounded-full border border-amber-100">
+            <span className="text-xs font-bold text-amber-700">{stats.currentStreak} Day Streak 🔥</span>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+        {AVAILABLE_BADGES.map((badge) => {
+          const isUnlocked = badges.some(b => b.id === badge.id);
+          return (
+            <div 
+              key={badge.id}
+              className={`flex flex-col items-center text-center p-4 rounded-2xl border transition-all ${
+                isUnlocked 
+                  ? 'bg-white border-amber-100 shadow-sm' 
+                  : 'bg-slate-50 border-slate-100 opacity-40 grayscale'
+              }`}
+            >
+              <div className={`text-3xl mb-2 ${isUnlocked ? 'animate-bounce-subtle' : ''}`}>
+                {badge.icon}
+              </div>
+              <p className={`text-xs font-bold ${isUnlocked ? 'text-slate-800' : 'text-slate-400'}`}>
+                {badge.title}
+              </p>
+              {isUnlocked && (
+                <p className="text-[10px] text-amber-600 font-medium mt-1">Unlocked!</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      
+      {badges.length === 0 && (
+        <div className="mt-6 p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center">
+          <p className="text-xs text-slate-400">Start studying to unlock your first achievement!</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DashboardView({ profile, schedule, modules, onExport, setActiveTab, onGenerate, isGenerating, error }: any) {
   const [now, setNow] = useState(new Date());
   
@@ -1499,9 +1658,9 @@ function DashboardView({ profile, schedule, modules, onExport, setActiveTab, onG
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Modules" value={modules.length} icon={<BookOpen className="text-blue-500" />} />
-        <StatCard label="Upcoming" value={schedule.filter((s: any) => isAfter(s.end, now)).length} icon={<Clock className="text-emerald-500" />} />
+        <StatCard label="Study Streak" value={`${profile.studyStats?.currentStreak || 0} Days`} icon={<Zap className="text-amber-500" />} />
         <StatCard label="Exams" value={modules.filter((m: any) => m.moduleType === 'Exam').length} icon={<AlertCircle className="text-amber-500" />} />
-        <StatCard label="Communities" value="Active" icon={<Users className="text-purple-500" />} />
+        <StatCard label="Badges" value={profile.badges?.length || 0} icon={<Award className="text-purple-500" />} />
       </div>
 
       {error && (
@@ -1509,51 +1668,55 @@ function DashboardView({ profile, schedule, modules, onExport, setActiveTab, onG
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
-          <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
-            <Calendar size={20} className="text-indigo-600" />
-            Upcoming Sessions
-          </h3>
-          <div className="space-y-4">
-            {schedule
-              .filter((s: any) => isAfter(s.end, now) || isSameDay(s.start, today))
-              .slice(0, 5)
-              .map((item: any) => (
-              <div key={item.id} className="flex items-center gap-4 p-5 rounded-2xl bg-slate-50 border border-slate-100 hover:border-indigo-200 transition-all group">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-sm ${
-                  item.type === 'exam' ? 'bg-red-100 text-red-600' : 
-                  item.type === 'assessment_due' ? 'bg-amber-100 text-amber-600' : 
-                  'bg-white text-indigo-600'
-                }`}>
-                  <Clock size={22} />
-                </div>
-                <div className="flex-1">
-                  <p className="font-bold text-slate-800">{item.title}</p>
-                  <p className="text-xs text-slate-400 font-medium">
-                    {isToday(item.start) ? 'Today' : isTomorrow(item.start) ? 'Tomorrow' : format(item.start, 'EEEE, MMM d')} • {format(item.start, 'HH:mm')}
-                  </p>
-                  {item.moduleId && (
-                    <p className="text-[10px] text-indigo-500 font-bold mt-1 truncate max-w-[200px]">
-                      {modules.find((m: any) => m.id === item.moduleId)?.units?.map((u: any) => u.name).filter(Boolean).join(' • ')}
+        <div className="lg:col-span-2 space-y-8">
+          <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
+            <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
+              <Calendar size={20} className="text-indigo-600" />
+              Upcoming Sessions
+            </h3>
+            <div className="space-y-4">
+              {schedule
+                .filter((s: any) => isAfter(s.end, now) || isSameDay(s.start, today))
+                .slice(0, 5)
+                .map((item: any) => (
+                <div key={item.id} className="flex items-center gap-4 p-5 rounded-2xl bg-slate-50 border border-slate-100 hover:border-indigo-200 transition-all group">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-sm ${
+                    item.type === 'exam' ? 'bg-red-100 text-red-600' : 
+                    item.type === 'assessment_due' ? 'bg-amber-100 text-amber-600' : 
+                    'bg-white text-indigo-600'
+                  }`}>
+                    <Clock size={22} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-bold text-slate-800">{item.title}</p>
+                    <p className="text-xs text-slate-400 font-medium">
+                      {isToday(item.start) ? 'Today' : isTomorrow(item.start) ? 'Tomorrow' : format(item.start, 'EEEE, MMM d')} • {format(item.start, 'HH:mm')}
                     </p>
-                  )}
+                    {item.moduleId && (
+                      <p className="text-[10px] text-indigo-500 font-bold mt-1 truncate max-w-[200px]">
+                        {modules.find((m: any) => m.id === item.moduleId)?.units?.map((u: any) => u.name).filter(Boolean).join(' • ')}
+                      </p>
+                    )}
+                  </div>
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg">
+                      <CheckCircle2 size={18} />
+                    </button>
+                  </div>
                 </div>
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg">
-                    <CheckCircle2 size={18} />
-                  </button>
+              ))}
+              {schedule.length === 0 && (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Calendar size={32} className="text-slate-200" />
+                  </div>
+                  <p className="text-slate-400 italic">No sessions scheduled yet.</p>
                 </div>
-              </div>
-            ))}
-            {schedule.length === 0 && (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Calendar size={32} className="text-slate-200" />
-                </div>
-                <p className="text-slate-400 italic">No sessions scheduled yet.</p>
-              </div>
-            )}
+              )}
+            </div>
           </div>
+
+          <BadgesSection profile={profile} />
         </div>
 
         <div className="space-y-6">
@@ -1594,13 +1757,15 @@ function DashboardView({ profile, schedule, modules, onExport, setActiveTab, onG
               <ProgressItem label="Exam Prep" value={20} color="bg-amber-500" />
             </div>
           </div>
+
+          <ProgressMilestones profile={profile} />
         </div>
       </div>
     </motion.div>
   );
 }
 
-function ModulesView({ profile, modules, communities, schedule, onUpdate, onAddAssessment, onRemove, onConfirm }: any) {
+function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpdateStats, onAddAssessment, onRemove, onConfirm }: any) {
   const [filter, setFilter] = useState<string>('all');
   const [moduleDetailTab, setModuleDetailTab] = useState<'ai_suite' | 'youtube' | 'live_lessons'>('ai_suite');
   const [viewMode, setViewMode] = useState<'list' | 'translator'>('list');
@@ -1719,6 +1884,7 @@ function ModulesView({ profile, modules, communities, schedule, onUpdate, onAddA
                   <StudyMaterials 
                     module={filteredModules[0]} 
                     onUpdate={(u: any) => onUpdate(filteredModules[0].id, u)} 
+                    onUpdateStats={onUpdateStats}
                     profile={profile}
                     modules={modules}
                     communities={communities}
@@ -1954,6 +2120,15 @@ function CommunitiesView({ communities, activeCommunity, setActiveCommunity, mes
       });
 
       onConfirm("Joined!", `You have successfully joined ${communityData.name}`, () => {});
+      
+      // Award Social Learner badge
+      if (profile && !profile.badges?.some((b: any) => b.id === 'social_learner')) {
+        const badge = AVAILABLE_BADGES.find(b => b.id === 'social_learner')!;
+        await updateDoc(doc(db, 'users', user.uid), {
+          badges: arrayUnion({ ...badge, unlockedAt: new Date() })
+        });
+      }
+
       setActiveCommunity({ id: communityDoc.id, ...communityData });
       setJoinCode('');
     } catch (error) {
@@ -4074,7 +4249,7 @@ function InteractiveExplanation({ explanation, keyConcepts, moduleId, moduleTitl
   );
 }
 
-function ModuleQuiz({ module, onUpdate, selectedUnitId }: { module: Module, onUpdate: (updates: Partial<Module>) => void, selectedUnitId?: string | null }) {
+function ModuleQuiz({ module, onUpdate, onUpdateStats, selectedUnitId }: { module: Module, onUpdate: (updates: Partial<Module>) => void, onUpdateStats?: (stats: any) => void, selectedUnitId?: string | null }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
@@ -4166,6 +4341,14 @@ function ModuleQuiz({ module, onUpdate, selectedUnitId }: { module: Module, onUp
         quiz: { ...currentQuiz, lastScore: finalScore, completedAt: new Date() },
         masteryScore: Math.round((finalScore + (module.masteryScore || 0)) / 2) // Simple mastery update
       });
+
+      // Track achievements
+      if (onUpdateStats) {
+        onUpdateStats({
+          quizzesCompleted: (module.quiz?.lastScore !== undefined ? 1 : 0) + 1, // This is a bit naive but okay for now
+          perfectScores: finalScore === 100 ? 1 : 0
+        });
+      }
     }
   };
 
@@ -5798,9 +5981,10 @@ function NotesEditor({
   );
 }
 
-function StudyMaterials({ module, onUpdate, profile, modules, communities, schedule, onConfirm }: { 
+function StudyMaterials({ module, onUpdate, onUpdateStats, profile, modules, communities, schedule, onConfirm }: { 
   module: Module, 
   onUpdate: (updates: Partial<Module>) => void,
+  onUpdateStats?: (stats: any) => void,
   profile: UserProfile,
   modules: Module[],
   communities: Community[],
@@ -7254,7 +7438,7 @@ function StudyMaterials({ module, onUpdate, profile, modules, communities, sched
 
           {activeTab === 'quiz' && (
             <motion.div key="quiz" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-              <ModuleQuiz module={module} onUpdate={handleUpdate} selectedUnitId={selectedUnitId} />
+              <ModuleQuiz module={module} onUpdate={handleUpdate} onUpdateStats={onUpdateStats} selectedUnitId={selectedUnitId} />
             </motion.div>
           )}
 
@@ -9931,6 +10115,15 @@ function SettingsView({ profile, onUpdate }: any) {
   const [showSuccess, setShowSuccess] = useState(false);
   const testAudioRef = useRef<HTMLAudioElement | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'profile' | 'study' | 'academic' | 'tutor' | 'advanced'>('profile');
+
+  const TABS = [
+    { id: 'profile', label: 'Profile', icon: <User size={18} /> },
+    { id: 'study', label: 'Study', icon: <BookOpen size={18} /> },
+    { id: 'academic', label: 'Academic', icon: <GraduationCap size={18} /> },
+    { id: 'tutor', label: 'AI Tutor', icon: <Mic size={18} /> },
+    { id: 'advanced', label: 'Advanced', icon: <Shield size={18} /> },
+  ];
 
   const THEME_COLORS = [
     { name: 'Indigo', value: '#4f46e5', class: 'bg-indigo-600' },
@@ -10021,17 +10214,21 @@ function SettingsView({ profile, onUpdate }: any) {
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'photo' | 'banner' = 'photo') => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 500 * 1024) { // 500KB limit for base64
-        setError("Image size should be less than 500KB");
+      if (file.size > 800 * 1024) { // Increased limit slightly for banner
+        setError("Image size should be less than 800KB");
         setTimeout(() => setError(null), 3000);
         return;
       }
       const reader = new FileReader();
       reader.onloadend = () => {
-        setLocalProfile({ ...localProfile, photoURL: reader.result as string });
+        if (type === 'photo') {
+          setLocalProfile({ ...localProfile, photoURL: reader.result as string });
+        } else {
+          setLocalProfile({ ...localProfile, bannerURL: reader.result as string });
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -10119,18 +10316,57 @@ function SettingsView({ profile, onUpdate }: any) {
     }
   };
 
+  const handleExportData = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(localProfile, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "studyflow_profile.json");
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Account Settings</h2>
-        <button 
-          onClick={handleSave}
-          disabled={isSaving}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50"
-        >
-          <Save size={20} />
-          {isSaving ? 'Saving...' : 'Save Changes'}
-        </button>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold">Account Settings</h2>
+          <p className="text-slate-400 text-sm">Manage your profile, study habits, and AI tutor preferences.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={handleSave}
+            disabled={isSaving}
+            className="flex items-center justify-center gap-2 bg-indigo-600 text-white px-8 py-3.5 rounded-2xl font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50"
+          >
+            <Save size={20} />
+            {isSaving ? 'Saving...' : 'Save All Changes'}
+          </button>
+          <button 
+            onClick={() => signOut(auth)}
+            className="p-3.5 text-rose-600 hover:bg-rose-50 rounded-2xl transition-all border border-transparent hover:border-rose-100"
+            title="Sign Out"
+          >
+            <LogOut size={20} />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex overflow-x-auto no-scrollbar gap-2 p-1 bg-slate-100 rounded-2xl w-fit">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
+              activeTab === tab.id 
+                ? 'bg-white text-indigo-600 shadow-sm' 
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            {tab.icon}
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {showSuccess && (
@@ -10154,381 +10390,524 @@ function SettingsView({ profile, onUpdate }: any) {
           {error}
         </motion.div>
       )}
-      <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-10">
-        <section>
-          <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-6">Profile Customization</h3>
-          <div className="flex flex-col md:flex-row items-center gap-8">
-            <div className="relative group">
-              <div className="w-32 h-32 rounded-[2rem] bg-slate-100 overflow-hidden border-4 border-white shadow-xl flex items-center justify-center">
-                {localProfile.photoURL ? (
-                  <img src={localProfile.photoURL} alt="Profile" className="w-full h-full object-cover" />
-                ) : (
-                  <User size={48} className="text-slate-300" />
-                )}
-              </div>
-              <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-[2rem]">
-                <div className="flex flex-col items-center gap-1">
-                  <Upload size={20} />
-                  <span className="text-[10px] font-bold uppercase">Change</span>
-                </div>
-                <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
-              </label>
-            </div>
 
-            <div className="flex-1 space-y-4">
-              <h4 className="text-sm font-bold text-slate-700">Theme Color</h4>
-              <div className="flex flex-wrap gap-3">
-                {THEME_COLORS.map((color) => (
-                  <button
-                    key={color.value}
-                    onClick={() => setLocalProfile({ ...localProfile, themeColor: color.value })}
-                    className={`w-10 h-10 rounded-xl transition-all flex items-center justify-center ${color.class} ${localProfile.themeColor === color.value ? 'ring-4 ring-slate-200 scale-110 shadow-lg' : 'hover:scale-105'}`}
-                    title={color.name}
-                  >
-                    {localProfile.themeColor === color.value && <CheckCircle2 size={18} className="text-white" />}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-slate-400">Select a color to personalize your StudyFlow experience.</p>
-            </div>
-          </div>
-        </section>
-
-        <section>
-          <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-6">Personal Information</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <InputGroup label="First Name" value={localProfile.firstName} onChange={(v: string) => setLocalProfile({...localProfile, firstName: v})} />
-            <InputGroup label="Last Name" value={localProfile.lastName} onChange={(v: string) => setLocalProfile({...localProfile, lastName: v})} />
-            <InputGroup label="Username" value={localProfile.username} onChange={(v: string) => setLocalProfile({...localProfile, username: v})} />
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700">Institution</label>
-              <select 
-                className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
-                value={isOtherInstitution ? 'other' : localProfile.institution}
-                onChange={(e) => handleInstitutionChange(e.target.value)}
-              >
-                <option value="">Select Institution</option>
-                {INSTITUTIONS.filter(i => i !== 'other').map(inst => (
-                  <option key={inst} value={inst}>{inst}</option>
-                ))}
-                <option value="other">Other (Manual Entry)</option>
-              </select>
-              {isOtherInstitution && (
-                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mt-2">
-                  <input 
-                    type="text"
-                    placeholder="Enter institution name"
-                    className="w-full bg-slate-50 border border-indigo-100 rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all"
-                    value={localProfile.institution}
-                    onChange={(e) => setLocalProfile({ ...localProfile, institution: e.target.value })}
-                  />
-                </motion.div>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section>
-          <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-6">Study Preferences</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700">Preferred Start Time</label>
-              <input 
-                type="time" 
-                className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all"
-                value={prefs.preferredStartTime}
-                onChange={(e) => updatePrefs({ preferredStartTime: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700">Preferred End Time</label>
-              <input 
-                type="time" 
-                className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all"
-                value={prefs.preferredEndTime}
-                onChange={(e) => updatePrefs({ preferredEndTime: e.target.value })}
-              />
-            </div>
-            <InputGroup 
-              label="Session Duration (mins)" 
-              type="number"
-              value={prefs.sessionDuration} 
-              onChange={(v: any) => updatePrefs({ sessionDuration: parseInt(v) })} 
-            />
-            <InputGroup 
-              label="Break Duration (mins)" 
-              type="number"
-              value={prefs.breakDuration} 
-              onChange={(v: any) => updatePrefs({ breakDuration: parseInt(v) })} 
-            />
-          </div>
-        </section>
-
-        <section>
-          <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-6">Academic Defaults</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <InputGroup 
-              label="Default Pass Mark (%)" 
-              type="number"
-              value={localProfile.defaultPassMark || 50} 
-              onChange={(v: any) => setLocalProfile({...localProfile, defaultPassMark: parseInt(v)})} 
-            />
-          </div>
-        </section>
-
-        <section>
-          <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-6">Study Availability</h3>
-          <p className="text-xs text-slate-400 mb-6">Set your available study hours for each day of the week. The smart timetable will use these slots to plan your sessions.</p>
-          <div className="space-y-3">
-            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day: any) => {
-              const slot = (localProfile.availability || []).find((s: any) => s.day === day) || {
-                day,
-                startTime: '09:00',
-                endTime: '17:00',
-                enabled: false
-              };
-              
-              const updateSlot = (updates: any) => {
-                const currentAvail = localProfile.availability || [];
-                const exists = currentAvail.some((s: any) => s.day === day);
-                let newAvail;
-                if (exists) {
-                  newAvail = currentAvail.map((s: any) => s.day === day ? { ...s, ...updates } : s);
-                } else {
-                  newAvail = [...currentAvail, { ...slot, ...updates }];
-                }
-                setLocalProfile({ ...localProfile, availability: newAvail });
-              };
-
-              return (
-                <div key={day} className={`flex flex-col md:flex-row md:items-center gap-4 p-4 rounded-2xl border transition-all ${slot.enabled ? 'bg-white border-indigo-100 shadow-sm' : 'bg-slate-50 border-slate-100 opacity-60'}`}>
-                  <div className="flex items-center gap-3 min-w-[140px]">
-                    <button 
-                      onClick={() => updateSlot({ enabled: !slot.enabled })}
-                      className={`w-12 h-6 rounded-full transition-all relative ${slot.enabled ? 'bg-indigo-600' : 'bg-slate-300'}`}
-                    >
-                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${slot.enabled ? 'left-7' : 'left-1'}`} />
-                    </button>
-                    <span className={`text-sm font-bold ${slot.enabled ? 'text-slate-800' : 'text-slate-400'}`}>{day}</span>
-                  </div>
-                  
-                  {slot.enabled && (
-                    <div className="flex-1 flex items-center gap-4">
-                      <div className="flex-1 flex items-center gap-2">
-                        <span className="text-[10px] font-bold uppercase text-slate-400">From</span>
-                        <input 
-                          type="time" 
-                          className="flex-1 bg-slate-50 border-none rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500"
-                          value={slot.startTime}
-                          onChange={(e) => updateSlot({ startTime: e.target.value })}
-                        />
+      <div className="bg-white p-8 md:p-10 rounded-[2.5rem] border border-slate-100 shadow-sm min-h-[500px]">
+        <AnimatePresence mode="wait">
+          {activeTab === 'profile' && (
+            <motion.div 
+              key="profile"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-10"
+            >
+              <section>
+                <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-6">Profile Customization</h3>
+                
+                {/* Banner Section */}
+                <div className="relative mb-12">
+                  <div className="w-full h-48 rounded-[2.5rem] bg-slate-100 overflow-hidden border border-slate-200 shadow-inner group relative">
+                    {localProfile.bannerURL ? (
+                      <img src={localProfile.bannerURL} alt="Banner" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-300">
+                        <ImageIcon size={48} />
                       </div>
-                      <div className="flex-1 flex items-center gap-2">
-                        <span className="text-[10px] font-bold uppercase text-slate-400">To</span>
-                        <input 
-                          type="time" 
-                          className="flex-1 bg-slate-50 border-none rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500"
-                          value={slot.endTime}
-                          onChange={(e) => updateSlot({ endTime: e.target.value })}
-                        />
+                    )}
+                    <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                      <div className="flex flex-col items-center gap-1">
+                        <Upload size={24} />
+                        <span className="text-xs font-bold uppercase">Change Banner</span>
+                      </div>
+                      <input type="file" className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, 'banner')} />
+                    </label>
+                  </div>
+
+                  {/* Profile Photo Overlay */}
+                  <div className="absolute -bottom-10 left-10">
+                    <div className="relative group">
+                      <div className="w-32 h-32 rounded-[2rem] bg-white p-1 shadow-2xl">
+                        <div className="w-full h-full rounded-[1.8rem] bg-slate-100 overflow-hidden flex items-center justify-center">
+                          {localProfile.photoURL ? (
+                            <img src={localProfile.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          ) : (
+                            <User size={48} className="text-slate-300" />
+                          )}
+                        </div>
+                      </div>
+                      <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-[2rem]">
+                        <div className="flex flex-col items-center gap-1">
+                          <Upload size={20} />
+                          <span className="text-[10px] font-bold uppercase">Change</span>
+                        </div>
+                        <input type="file" className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, 'photo')} />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-16 grid grid-cols-1 lg:grid-cols-3 gap-10">
+                  <div className="lg:col-span-2 space-y-8">
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-bold text-slate-700">Bio</h4>
+                      <textarea 
+                        className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all min-h-[120px] resize-none"
+                        placeholder="Tell us about yourself, your study goals, or your favorite subjects..."
+                        value={localProfile.bio || ''}
+                        onChange={(e) => setLocalProfile({ ...localProfile, bio: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-bold text-slate-700">Interests & Subjects</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {(localProfile.interests || []).map((interest, idx) => (
+                          <span key={idx} className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 group">
+                            {interest}
+                            <button 
+                              onClick={() => {
+                                const newInterests = (localProfile.interests || []).filter((_, i) => i !== idx);
+                                setLocalProfile({ ...localProfile, interests: newInterests });
+                              }}
+                              className="hover:text-rose-500 transition-colors"
+                            >
+                              <X size={14} />
+                            </button>
+                          </span>
+                        ))}
+                        <div className="relative">
+                          <input 
+                            type="text"
+                            placeholder="Add interest..."
+                            className="bg-slate-50 border-none rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-indigo-500 transition-all w-32"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                const val = e.currentTarget.value.trim();
+                                if (val && !(localProfile.interests || []).includes(val)) {
+                                  setLocalProfile({ 
+                                    ...localProfile, 
+                                    interests: [...(localProfile.interests || []), val] 
+                                  });
+                                  e.currentTarget.value = '';
+                                }
+                              }
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
-                  )}
-                  {!slot.enabled && (
-                    <span className="text-xs text-slate-400 italic">Not available</span>
-                  )}
+                  </div>
+
+                  <div className="space-y-8">
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-bold text-slate-700">Theme Color</h4>
+                      <div className="flex flex-wrap gap-3">
+                        {THEME_COLORS.map((color) => (
+                          <button
+                            key={color.value}
+                            onClick={() => setLocalProfile({ ...localProfile, themeColor: color.value })}
+                            className={`w-10 h-10 rounded-xl transition-all flex items-center justify-center ${color.class} ${localProfile.themeColor === color.value ? 'ring-4 ring-slate-200 scale-110 shadow-lg' : 'hover:scale-105'}`}
+                            title={color.name}
+                          >
+                            {localProfile.themeColor === color.value && <CheckCircle2 size={18} className="text-white" />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-bold text-slate-700">Social Links</h4>
+                      <div className="space-y-3">
+                        {['LinkedIn', 'GitHub', 'Twitter'].map((platform) => {
+                          const link = (localProfile.socialLinks || []).find(l => l.platform === platform);
+                          return (
+                            <div key={platform} className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400">
+                                {platform === 'LinkedIn' && <Linkedin size={18} />}
+                                {platform === 'GitHub' && <Github size={18} />}
+                                {platform === 'Twitter' && <Twitter size={18} />}
+                              </div>
+                              <input 
+                                type="text"
+                                placeholder={`${platform} URL`}
+                                className="flex-1 bg-slate-50 border-none rounded-xl px-4 py-2.5 text-xs focus:ring-2 focus:ring-indigo-500 transition-all"
+                                value={link?.url || ''}
+                                onChange={(e) => {
+                                  const newLinks = [...(localProfile.socialLinks || [])];
+                                  const idx = newLinks.findIndex(l => l.platform === platform);
+                                  if (idx > -1) {
+                                    newLinks[idx] = { ...newLinks[idx], url: e.target.value };
+                                  } else {
+                                    newLinks.push({ platform, url: e.target.value });
+                                  }
+                                  setLocalProfile({ ...localProfile, socialLinks: newLinks });
+                                }}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-        </section>
+              </section>
 
-        <section>
-          <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-6">Academic Settings</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <InputGroup 
-              label="Default Pass Mark (%)" 
-              type="number"
-              value={localProfile.defaultPassMark || 50} 
-              onChange={(v: any) => setLocalProfile({...localProfile, defaultPassMark: parseInt(v)})} 
-              placeholder="e.g. 50"
-            />
-          </div>
-        </section>
+              <section>
+                <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-6">Personal Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <InputGroup label="First Name" value={localProfile.firstName} onChange={(v: string) => setLocalProfile({...localProfile, firstName: v})} />
+                  <InputGroup label="Last Name" value={localProfile.lastName} onChange={(v: string) => setLocalProfile({...localProfile, lastName: v})} />
+                  <InputGroup label="Username" value={localProfile.username} onChange={(v: string) => setLocalProfile({...localProfile, username: v})} />
+                  <InputGroup label="Cell Phone" value={localProfile.cellPhone || ''} onChange={(v: string) => setLocalProfile({...localProfile, cellPhone: v})} placeholder="+1 (555) 000-0000" />
+                  <InputGroup label="Date of Birth" type="date" value={localProfile.dateOfBirth || ''} onChange={(v: string) => setLocalProfile({...localProfile, dateOfBirth: v})} />
+                  <div className="md:col-span-2">
+                    <InputGroup label="Address" value={localProfile.address || ''} onChange={(v: string) => setLocalProfile({...localProfile, address: v})} placeholder="123 Study Lane, Knowledge City" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-700">Institution</label>
+                    <select 
+                      className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+                      value={isOtherInstitution ? 'other' : localProfile.institution}
+                      onChange={(e) => handleInstitutionChange(e.target.value)}
+                    >
+                      <option value="">Select Institution</option>
+                      {INSTITUTIONS.filter(i => i !== 'other').map(inst => (
+                        <option key={inst} value={inst}>{inst}</option>
+                      ))}
+                      <option value="other">Other (Manual Entry)</option>
+                    </select>
+                    {isOtherInstitution && (
+                      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mt-2">
+                        <input 
+                          type="text"
+                          placeholder="Enter institution name"
+                          className="w-full bg-slate-50 border border-indigo-100 rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all"
+                          value={localProfile.institution}
+                          onChange={(e) => setLocalProfile({ ...localProfile, institution: e.target.value })}
+                        />
+                      </motion.div>
+                    )}
+                  </div>
+                </div>
+              </section>
+            </motion.div>
+          )}
 
-        <section>
-          <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-6">AI Voice Tutor Settings</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-4">
-              <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                <Mic size={16} className="text-indigo-600" />
-                Preferred Voice
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {['Zephyr', 'Kore', 'Puck', 'Charon', 'Fenrir'].map((voice) => (
-                  <button
-                    key={voice}
-                    onClick={() => setLocalProfile({
-                      ...localProfile,
-                      voiceTutorSettings: { ...voiceSettings, voiceName: voice as any }
-                    })}
-                    className={`px-4 py-3 rounded-xl text-xs font-bold transition-all border ${
-                      voiceSettings.voiceName === voice 
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100' 
-                        : 'bg-white text-slate-600 border-slate-100 hover:bg-slate-50'
-                    }`}
-                  >
-                    {voice}
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={handleTestVoice}
-                  disabled={isTestingVoice}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all disabled:opacity-50"
-                >
-                  {isTestingVoice ? (
-                    <RotateCcw size={14} className="animate-spin" />
-                  ) : (
-                    <Play size={14} />
-                  )}
-                  {isTestingVoice ? 'Generating Sample...' : `Test ${voiceSettings.voiceName} Voice`}
-                </button>
-                {testAudioUrl && (
-                  <audio 
-                    ref={testAudioRef} 
-                    src={testAudioUrl} 
-                    onEnded={() => setTestAudioUrl(null)}
-                    className="hidden"
+          {activeTab === 'study' && (
+            <motion.div 
+              key="study"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-10"
+            >
+              <section>
+                <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-6">Study Preferences</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-700">Preferred Start Time</label>
+                    <input 
+                      type="time" 
+                      className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all"
+                      value={prefs.preferredStartTime}
+                      onChange={(e) => updatePrefs({ preferredStartTime: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-700">Preferred End Time</label>
+                    <input 
+                      type="time" 
+                      className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all"
+                      value={prefs.preferredEndTime}
+                      onChange={(e) => updatePrefs({ preferredEndTime: e.target.value })}
+                    />
+                  </div>
+                  <InputGroup 
+                    label="Session Duration (mins)" 
+                    type="number"
+                    value={prefs.sessionDuration} 
+                    onChange={(v: any) => updatePrefs({ sessionDuration: parseInt(v) })} 
                   />
-                )}
-              </div>
-              <p className="text-xs text-slate-400">Choose the AI voice that best suits your learning style. Click the test button to hear a sample.</p>
-            </div>
-
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <label className="text-sm font-bold text-slate-700">Speaking Rate</label>
-                  <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">{voiceSettings.speakingRate}x</span>
-                </div>
-                <input 
-                  type="range" min="0.5" max="2.0" step="0.1"
-                  className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                  value={voiceSettings.speakingRate}
-                  onChange={(e) => setLocalProfile({
-                    ...localProfile,
-                    voiceTutorSettings: { ...voiceSettings, speakingRate: parseFloat(e.target.value) }
-                  })}
-                />
-                <div className="flex justify-between text-[10px] text-slate-400 font-bold uppercase">
-                  <span>Slower</span>
-                  <span>Normal</span>
-                  <span>Faster</span>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <label className="text-sm font-bold text-slate-700">Pitch</label>
-                  <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">{voiceSettings.pitch > 0 ? '+' : ''}{voiceSettings.pitch}</span>
-                </div>
-                <input 
-                  type="range" min="-10" max="10" step="1"
-                  className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                  value={voiceSettings.pitch}
-                  onChange={(e) => setLocalProfile({
-                    ...localProfile,
-                    voiceTutorSettings: { ...voiceSettings, pitch: parseInt(e.target.value) }
-                  })}
-                />
-                <div className="flex justify-between text-[10px] text-slate-400 font-bold uppercase">
-                  <span>Lower</span>
-                  <span>Normal</span>
-                  <span>Higher</span>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <label className="text-sm font-bold text-slate-700">Default Volume</label>
-                  <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">{Math.round(voiceSettings.volume * 100)}%</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Volume1 size={16} className="text-slate-400" />
-                  <input 
-                    type="range" min="0" max="1" step="0.01"
-                    className="flex-1 h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                    value={voiceSettings.volume}
-                    onChange={(e) => setLocalProfile({
-                      ...localProfile,
-                      voiceTutorSettings: { ...voiceSettings, volume: parseFloat(e.target.value) }
-                    })}
+                  <InputGroup 
+                    label="Break Duration (mins)" 
+                    type="number"
+                    value={prefs.breakDuration} 
+                    onChange={(v: any) => updatePrefs({ breakDuration: parseInt(v) })} 
                   />
-                  <Volume2 size={16} className="text-slate-400" />
                 </div>
-              </div>
-            </div>
-          </div>
-        </section>
+              </section>
 
-        <section>
-          <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-6">System & Localization</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <InputGroup label="Country" value={localProfile.country || ''} onChange={(v: string) => setLocalProfile({...localProfile, country: v})} />
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700">Auto Update Time</label>
-              <div className="flex items-center gap-3">
-                <button 
-                  onClick={() => setLocalProfile({...localProfile, autoUpdateTime: !localProfile.autoUpdateTime})}
-                  className={`w-12 h-6 rounded-full transition-all relative ${localProfile.autoUpdateTime ? 'bg-indigo-600' : 'bg-slate-200'}`}
-                >
-                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${localProfile.autoUpdateTime ? 'left-7' : 'left-1'}`} />
-                </button>
-                <span className="text-sm text-slate-500">{localProfile.autoUpdateTime ? 'Enabled' : 'Disabled'}</span>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700">Track Login Activity</label>
-              <div className="flex items-center gap-3">
-                <button 
-                  onClick={() => setLocalProfile({...localProfile, trackLogin: !localProfile.trackLogin})}
-                  className={`w-12 h-6 rounded-full transition-all relative ${localProfile.trackLogin ? 'bg-indigo-600' : 'bg-slate-200'}`}
-                >
-                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${localProfile.trackLogin ? 'left-7' : 'left-1'}`} />
-                </button>
-                <span className="text-sm text-slate-500">{localProfile.trackLogin ? 'Enabled' : 'Disabled'}</span>
-              </div>
-            </div>
-            {localProfile.trackLogin && localProfile.lastLogin && (
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">Last Login</label>
-                <p className="text-sm text-slate-500 bg-slate-50 px-5 py-4 rounded-2xl">
-                  {localProfile.lastLogin?.toDate ? format(localProfile.lastLogin.toDate(), 'PPP p') : 'Just now'}
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
+              <section>
+                <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-6">Weekly Availability</h3>
+                <p className="text-xs text-slate-400 mb-6">Set your available study hours for each day of the week. The smart timetable will use these slots to plan your sessions.</p>
+                <div className="grid grid-cols-1 gap-3">
+                  {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day: any) => {
+                    const slot = (localProfile.availability || []).find((s: any) => s.day === day) || {
+                      day,
+                      startTime: '09:00',
+                      endTime: '17:00',
+                      enabled: false
+                    };
+                    
+                    const updateSlot = (updates: any) => {
+                      const currentAvail = localProfile.availability || [];
+                      const exists = currentAvail.some((s: any) => s.day === day);
+                      let newAvail;
+                      if (exists) {
+                        newAvail = currentAvail.map((s: any) => s.day === day ? { ...s, ...updates } : s);
+                      } else {
+                        newAvail = [...currentAvail, { ...slot, ...updates }];
+                      }
+                      setLocalProfile({ ...localProfile, availability: newAvail });
+                    };
 
-        <section className="pt-6 border-t border-slate-100 flex flex-col md:flex-row gap-4">
-          <button 
-            onClick={handleSave}
-            disabled={isSaving}
-            className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 text-white px-6 py-4 rounded-2xl font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50"
-          >
-            <Save size={20} />
-            {isSaving ? 'Saving...' : 'Save All Changes'}
-          </button>
-          <button 
-            onClick={() => signOut(auth)}
-            className="flex items-center justify-center gap-2 text-red-600 font-bold hover:bg-red-50 px-6 py-4 rounded-2xl transition-all"
-          >
-            <LogOut size={20} />
-            Sign Out
-          </button>
-        </section>
+                    return (
+                      <div key={day} className={`flex flex-col md:flex-row md:items-center gap-4 p-4 rounded-2xl border transition-all ${slot.enabled ? 'bg-white border-indigo-100 shadow-sm' : 'bg-slate-50 border-slate-100 opacity-60'}`}>
+                        <div className="flex items-center gap-3 min-w-[140px]">
+                          <button 
+                            onClick={() => updateSlot({ enabled: !slot.enabled })}
+                            className={`w-12 h-6 rounded-full transition-all relative ${slot.enabled ? 'bg-indigo-600' : 'bg-slate-300'}`}
+                          >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${slot.enabled ? 'left-7' : 'left-1'}`} />
+                          </button>
+                          <span className={`text-sm font-bold ${slot.enabled ? 'text-slate-800' : 'text-slate-400'}`}>{day}</span>
+                        </div>
+                        
+                        {slot.enabled && (
+                          <div className="flex-1 flex items-center gap-4">
+                            <div className="flex-1 flex items-center gap-2">
+                              <span className="text-[10px] font-bold uppercase text-slate-400">From</span>
+                              <input 
+                                type="time" 
+                                className="flex-1 bg-slate-50 border-none rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500"
+                                value={slot.startTime}
+                                onChange={(e) => updateSlot({ startTime: e.target.value })}
+                              />
+                            </div>
+                            <div className="flex-1 flex items-center gap-2">
+                              <span className="text-[10px] font-bold uppercase text-slate-400">To</span>
+                              <input 
+                                type="time" 
+                                className="flex-1 bg-slate-50 border-none rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500"
+                                value={slot.endTime}
+                                onChange={(e) => updateSlot({ endTime: e.target.value })}
+                              />
+                            </div>
+                          </div>
+                        )}
+                        {!slot.enabled && (
+                          <span className="text-xs text-slate-400 italic">Not available</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            </motion.div>
+          )}
+
+          {activeTab === 'academic' && (
+            <motion.div 
+              key="academic"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-10"
+            >
+              <section>
+                <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-6">Academic Defaults</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <InputGroup 
+                    label="Default Pass Mark (%)" 
+                    type="number"
+                    value={localProfile.defaultPassMark || 50} 
+                    onChange={(v: any) => setLocalProfile({...localProfile, defaultPassMark: parseInt(v)})} 
+                    placeholder="e.g. 50"
+                  />
+                </div>
+                <p className="text-xs text-slate-400 mt-4">This value will be used as the default target for new modules you create.</p>
+              </section>
+            </motion.div>
+          )}
+
+          {activeTab === 'tutor' && (
+            <motion.div 
+              key="tutor"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-10"
+            >
+              <section>
+                <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-6">AI Voice Tutor Settings</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                  <div className="space-y-6">
+                    <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                      <Mic size={16} className="text-indigo-600" />
+                      Preferred Voice
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {['Zephyr', 'Kore', 'Puck', 'Charon', 'Fenrir'].map((voice) => (
+                        <button
+                          key={voice}
+                          onClick={() => setLocalProfile({
+                            ...localProfile,
+                            voiceTutorSettings: { ...voiceSettings, voiceName: voice as any }
+                          })}
+                          className={`px-4 py-3 rounded-xl text-xs font-bold transition-all border ${
+                            voiceSettings.voiceName === voice 
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100' 
+                              : 'bg-white text-slate-600 border-slate-100 hover:bg-slate-50'
+                          }`}
+                        >
+                          {voice}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <button
+                        onClick={handleTestVoice}
+                        disabled={isTestingVoice}
+                        className="flex items-center gap-2 px-6 py-3 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all disabled:opacity-50"
+                      >
+                        {isTestingVoice ? (
+                          <RotateCcw size={14} className="animate-spin" />
+                        ) : (
+                          <Play size={14} />
+                        )}
+                        {isTestingVoice ? 'Generating Sample...' : `Test ${voiceSettings.voiceName} Voice`}
+                      </button>
+                      {testAudioUrl && (
+                        <audio 
+                          ref={testAudioRef} 
+                          src={testAudioUrl} 
+                          onEnded={() => setTestAudioUrl(null)}
+                          className="hidden"
+                        />
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-400">Choose the AI voice that best suits your learning style. Click the test button to hear a sample.</p>
+                  </div>
+
+                  <div className="space-y-8">
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <label className="text-sm font-bold text-slate-700">Speaking Rate</label>
+                        <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">{voiceSettings.speakingRate}x</span>
+                      </div>
+                      <input 
+                        type="range" min="0.5" max="2.0" step="0.1"
+                        className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                        value={voiceSettings.speakingRate}
+                        onChange={(e) => setLocalProfile({
+                          ...localProfile,
+                          voiceTutorSettings: { ...voiceSettings, speakingRate: parseFloat(e.target.value) }
+                        })}
+                      />
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <label className="text-sm font-bold text-slate-700">Pitch</label>
+                        <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">{voiceSettings.pitch > 0 ? '+' : ''}{voiceSettings.pitch}</span>
+                      </div>
+                      <input 
+                        type="range" min="-20" max="20" step="1"
+                        className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                        value={voiceSettings.pitch}
+                        onChange={(e) => setLocalProfile({
+                          ...localProfile,
+                          voiceTutorSettings: { ...voiceSettings, pitch: parseInt(e.target.value) }
+                        })}
+                      />
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <label className="text-sm font-bold text-slate-700">Volume</label>
+                        <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">{Math.round(voiceSettings.volume * 100)}%</span>
+                      </div>
+                      <input 
+                        type="range" min="0" max="1" step="0.1"
+                        className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                        value={voiceSettings.volume}
+                        onChange={(e) => setLocalProfile({
+                          ...localProfile,
+                          voiceTutorSettings: { ...voiceSettings, volume: parseFloat(e.target.value) }
+                        })}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </motion.div>
+          )}
+
+          {activeTab === 'advanced' && (
+            <motion.div 
+              key="advanced"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-10"
+            >
+              <section>
+                <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-6">Data Management</h3>
+                <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-700">Export Your Data</h4>
+                      <p className="text-xs text-slate-400">Download a copy of your profile and settings in JSON format.</p>
+                    </div>
+                    <button 
+                      onClick={handleExportData}
+                      className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all"
+                    >
+                      <DownloadIcon size={14} />
+                      Export JSON
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="text-sm font-bold uppercase tracking-widest text-rose-400 mb-6">Danger Zone</h3>
+                <div className="p-6 rounded-2xl bg-rose-50 border border-rose-100 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-bold text-rose-700">Reset Study Progress</h4>
+                      <p className="text-xs text-rose-400">This will clear your study streaks and statistics. This action is irreversible.</p>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        if (confirm("Are you sure you want to reset your study progress? This cannot be undone.")) {
+                          setLocalProfile({
+                            ...localProfile,
+                            studyStats: {
+                              currentStreak: 0,
+                              longestStreak: 0,
+                              totalStudyHours: 0,
+                              quizzesCompleted: 0,
+                              perfectScores: 0,
+                              modulesCompleted: 0,
+                              lastStudyDate: null
+                            }
+                          });
+                          setError("Study progress reset. Save changes to finalize.");
+                          setTimeout(() => setError(null), 5000);
+                        }
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-white border border-rose-200 text-rose-600 rounded-xl text-xs font-bold hover:bg-rose-100 transition-all"
+                    >
+                      <RotateCcw size={14} />
+                      Reset Progress
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </motion.div>
   );

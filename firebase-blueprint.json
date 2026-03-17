@@ -13,6 +13,9 @@
         "institution": { "type": "string" },
         "studentLevel": { "type": "string", "enum": ["High School", "University"] },
         "yearGrade": { "type": "string" },
+        "cellPhone": { "type": "string" },
+        "dateOfBirth": { "type": "string" },
+        "address": { "type": "string" },
         "defaultPassMark": { "type": "number", "description": "Default pass mark percentage for modules" },
         "studyPreferences": {
           "type": "object",
@@ -23,7 +26,33 @@
             "breakDuration": { "type": "number" }
           }
         },
-        "sharedWith": { "type": "array", "items": { "type": "string" } }
+        "sharedWith": { "type": "array", "items": { "type": "string" } },
+        "badges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "description": { "type": "string" },
+              "icon": { "type": "string" },
+              "category": { "type": "string" },
+              "unlockedAt": { "type": "string" }
+            }
+          }
+        },
+        "studyStats": {
+          "type": "object",
+          "properties": {
+            "currentStreak": { "type": "number" },
+            "longestStreak": { "type": "number" },
+            "totalStudyHours": { "type": "number" },
+            "quizzesCompleted": { "type": "number" },
+            "perfectScores": { "type": "number" },
+            "modulesCompleted": { "type": "number" },
+            "lastStudyDate": { "type": "string" }
+          }
+        }
       },
       "required": ["uid", "firstName", "lastName", "email", "username", "institution", "studentLevel", "yearGrade", "sharedWith"]
     },

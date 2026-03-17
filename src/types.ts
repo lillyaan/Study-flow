@@ -126,6 +126,25 @@ export interface Module {
   isLanguage?: boolean; // Explicitly indicate if this is a language module
 }
 
+export interface Badge {
+  id: string;
+  title: string;
+  description: string;
+  icon: string; // Lucide icon name or emoji
+  category: 'completion' | 'quiz' | 'habit' | 'social';
+  unlockedAt?: any;
+}
+
+export interface StudyStats {
+  currentStreak: number;
+  longestStreak: number;
+  totalStudyHours: number;
+  quizzesCompleted: number;
+  perfectScores: number;
+  modulesCompleted: number;
+  lastStudyDate?: any;
+}
+
 export interface UserProfile {
   uid: string;
   firstName: string;
@@ -136,14 +155,23 @@ export interface UserProfile {
   studentLevel: StudyType;
   yearGrade: string;
   country?: string;
+  cellPhone?: string;
+  dateOfBirth?: string;
+  address?: string;
   defaultPassMark?: number; // Global default pass mark
   trackLogin?: boolean;
   autoUpdateTime?: boolean;
   timezone?: string;
   lastLogin?: any;
   photoURL?: string;
+  bannerURL?: string;
+  bio?: string;
   themeColor?: string;
+  interests?: string[];
+  socialLinks?: { platform: string; url: string }[];
   sharedWith?: string[]; // UIDs of users who can see this profile
+  badges?: Badge[];
+  studyStats?: StudyStats;
   studyPreferences?: {
     preferredStartTime: string; // "09:00"
     preferredEndTime: string;   // "21:00"
