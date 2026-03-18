@@ -88,11 +88,14 @@ import {
   Github,
   Twitter,
   Bookmark,
+  Activity,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
+import StudyHabitsDashboard from './components/StudyHabitsDashboard';
+import UniversityPortal from './components/UniversityPortal';
 
 // Set worker for pdfjs
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -184,7 +187,8 @@ import {
   signOut, 
   GoogleAuthProvider, 
   signInWithPopup,
-  updateProfile
+  updateProfile,
+  deleteUser
 } from 'firebase/auth';
 import { 
   doc, 
@@ -233,7 +237,9 @@ import {
   Flashcard,
   ModuleChatMessage,
   PracticeExam,
-  YoutubeVideo
+  YoutubeVideo,
+  StudyLog,
+  VideoSlide
 } from './types';
 
 // --- Constants ---
@@ -390,6 +396,142 @@ function ConfirmDialog({ isOpen, title, message, onConfirm, onClose, confirmText
   );
 }
 
+function LogStudyModal({ isOpen, onClose, modules, onLogStudy, initialModuleId }: any) {
+  const [form, setForm] = useState({
+    moduleId: initialModuleId || '',
+    unitId: '',
+    duration: 30,
+    notes: ''
+  });
+
+  useEffect(() => {
+    if (initialModuleId) {
+      setForm(prev => ({ ...prev, moduleId: initialModuleId }));
+    }
+  }, [initialModuleId]);
+
+  const selectedModule = modules.find((m: any) => m.id === form.moduleId);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.moduleId) return;
+
+    const endTime = new Date();
+    const startTime = new Date(endTime.getTime() - form.duration * 60000);
+
+    await onLogStudy({
+      moduleId: form.moduleId,
+      unitId: form.unitId || undefined,
+      startTime,
+      endTime,
+      duration: form.duration,
+      notes: form.notes
+    });
+
+    onClose();
+    setForm({ moduleId: '', unitId: '', duration: 30, notes: '' });
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-white rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl"
+      >
+        <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-indigo-600 text-white">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+              <Clock size={20} />
+            </div>
+            <h3 className="text-xl font-bold">Log Study Session</h3>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-xl transition-all">
+            <Plus size={24} className="rotate-45" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-8 space-y-6">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Module</label>
+            <select 
+              required
+              value={form.moduleId}
+              onChange={(e) => setForm({ ...form, moduleId: e.target.value, unitId: '' })}
+              className="w-full bg-slate-50 border-none rounded-2xl px-4 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">Choose a module...</option>
+              {modules.map((m: any) => (
+                <option key={m.id} value={m.id}>{m.title}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Unit (Optional)</label>
+            <select 
+              value={form.unitId}
+              onChange={(e) => setForm({ ...form, unitId: e.target.value })}
+              className="w-full bg-slate-50 border-none rounded-2xl px-4 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+              disabled={!form.moduleId}
+            >
+              <option value="">Select a unit...</option>
+              {selectedModule?.units?.map((u: any) => (
+                <option key={u.id} value={u.id}>{u.unitNumber}: {u.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Duration</label>
+              <div className="relative">
+                <input 
+                  type="number"
+                  required
+                  min="1"
+                  value={form.duration}
+                  onChange={(e) => setForm({ ...form, duration: parseInt(e.target.value) || 0 })}
+                  className="w-full bg-slate-50 border-none rounded-2xl px-4 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 pr-12"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">min</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Date</label>
+              <div className="w-full bg-slate-50 border-none rounded-2xl px-4 py-4 text-sm font-bold text-slate-400">
+                Today
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Notes</label>
+            <textarea 
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              placeholder="What did you focus on during this session?"
+              className="w-full bg-slate-50 border-none rounded-2xl px-4 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 h-24 resize-none"
+            />
+          </div>
+
+          <div className="pt-4">
+            <button 
+              type="submit"
+              className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 flex items-center justify-center gap-2"
+            >
+              <Check size={18} />
+              Save Study Session
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -413,13 +555,16 @@ export default function App() {
     testConnection();
   }, []);
 
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'modules' | 'schedule' | 'marks' | 'communities' | 'sharing' | 'settings' | 'virtual_classroom' | 'youtube'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'modules' | 'schedule' | 'marks' | 'communities' | 'sharing' | 'settings' | 'virtual_classroom' | 'youtube' | 'analytics' | 'university_portal'>('dashboard');
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
+  const [studyLogs, setStudyLogs] = useState<StudyLog[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [isAiTutorOpen, setIsAiTutorOpen] = useState(true);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [isLogStudyModalOpen, setIsLogStudyModalOpen] = useState(false);
+  const [selectedLogModuleId, setSelectedLogModuleId] = useState<string | null>(null);
   const [editingScheduleItem, setEditingScheduleItem] = useState<ScheduleItem | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -476,6 +621,10 @@ export default function App() {
   // Auth State
   useEffect(() => {
     let unsubscribeSchedule: (() => void) | undefined;
+    let unsubscribeStudyLogs: (() => void) | undefined;
+    let unsubscribeModules: (() => void) | undefined;
+    let unsubscribeSharedProfiles: (() => void) | undefined;
+
     const unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
       if (u) {
         setUser(u);
@@ -485,21 +634,29 @@ export default function App() {
             lastLogin: serverTimestamp()
           });
         }
-        fetchModules(u.uid);
-        fetchSharedProfiles(u.uid);
+        unsubscribeModules = fetchModules(u.uid);
+        unsubscribeSharedProfiles = fetchSharedProfiles(u.uid);
         unsubscribeSchedule = fetchSchedule(u.uid);
+        unsubscribeStudyLogs = fetchStudyLogs(u.uid);
       } else {
         setUser(null);
         setProfile(null);
         setModules([]);
         setSchedule([]);
+        setStudyLogs([]);
         if (unsubscribeSchedule) unsubscribeSchedule();
+        if (unsubscribeStudyLogs) unsubscribeStudyLogs();
+        if (unsubscribeModules) unsubscribeModules();
+        if (unsubscribeSharedProfiles) unsubscribeSharedProfiles();
       }
       setLoading(false);
     });
     return () => {
       unsubscribeAuth();
       if (unsubscribeSchedule) unsubscribeSchedule();
+      if (unsubscribeStudyLogs) unsubscribeStudyLogs();
+      if (unsubscribeModules) unsubscribeModules();
+      if (unsubscribeSharedProfiles) unsubscribeSharedProfiles();
     };
   }, []);
 
@@ -516,6 +673,20 @@ export default function App() {
       setSchedule(items);
     });
   };
+
+  const fetchStudyLogs = (uid: string) => {
+    const q = query(collection(db, 'users', uid, 'studyLogs'), orderBy('timestamp', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+      const logs = snapshot.docs.map(doc => ({
+        ...doc.data(),
+        id: doc.id,
+        startTime: doc.data().startTime.toDate(),
+        endTime: doc.data().endTime.toDate()
+      })) as StudyLog[];
+      setStudyLogs(logs);
+    });
+  };
+
   const fetchProfile = async (uid: string) => {
     const docRef = doc(db, 'users', uid);
     const docSnap = await getDoc(docRef);
@@ -797,6 +968,29 @@ export default function App() {
 
   const handleLogout = () => signOut(auth);
 
+  const handleShareApp = () => {
+    const appUrl = window.location.origin;
+    if (navigator.share) {
+      navigator.share({
+        title: 'StudyFlow AI',
+        text: 'Check out StudyFlow AI - the ultimate AI-powered study companion!',
+        url: appUrl,
+      }).catch(err => {
+        console.error("Error sharing:", err);
+        copyToClipboard(appUrl);
+      });
+    } else {
+      copyToClipboard(appUrl);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    });
+  };
+
   const handleAddModule = async () => {
     if (!user) return;
     const newMod = {
@@ -838,6 +1032,85 @@ export default function App() {
         });
       }
     }
+  };
+
+  const handleLogStudy = async (log: Omit<StudyLog, 'id' | 'timestamp'>) => {
+    if (!user) return;
+    try {
+      await addDoc(collection(db, 'users', user.uid, 'studyLogs'), {
+        ...log,
+        timestamp: serverTimestamp()
+      });
+      
+      // Update total study hours in stats
+      if (profile) {
+        const currentStats = profile.studyStats || {
+          currentStreak: 0,
+          longestStreak: 0,
+          totalStudyHours: 0,
+          quizzesCompleted: 0,
+          perfectScores: 0,
+          modulesCompleted: 0,
+          lastStudyDate: null
+        };
+        
+        const updatedStats = {
+          ...currentStats,
+          totalStudyHours: currentStats.totalStudyHours + (log.duration / 60)
+        };
+        
+        await updateDoc(doc(db, 'users', user.uid), {
+          studyStats: updatedStats
+        });
+      }
+    } catch (error) {
+      console.error("Error logging study session:", error);
+    }
+  };
+
+  const handleDeleteLog = async (id: string) => {
+    if (!user || !profile) return;
+    confirmAction(
+      "Delete Study Log",
+      "Are you sure you want to delete this study log? Your total study hours will be updated accordingly.",
+      async () => {
+        const logToDelete = studyLogs.find(l => l.id === id);
+        if (logToDelete) {
+          await deleteDoc(doc(db, 'users', user.uid, 'studyLogs', id));
+          
+          // Update total study hours in stats
+          const currentStats = profile.studyStats || {
+            currentStreak: 0,
+            longestStreak: 0,
+            totalStudyHours: 0,
+            quizzesCompleted: 0,
+            perfectScores: 0,
+            modulesCompleted: 0,
+            lastStudyDate: null
+          };
+          
+          const updatedStats = {
+            ...currentStats,
+            totalStudyHours: Math.max(0, currentStats.totalStudyHours - (logToDelete.duration / 60))
+          };
+          
+          await updateDoc(doc(db, 'users', user.uid), {
+            studyStats: updatedStats
+          });
+        }
+      }
+    );
+  };
+
+  const handleUpdateUnit = async (moduleId: string, unitId: string, updates: any) => {
+    const module = modules.find(m => m.id === moduleId);
+    if (!module || !module.units) return;
+
+    const updatedUnits = module.units.map(u => 
+      u.id === unitId ? { ...u, ...updates } : u
+    );
+
+    await handleUpdateModule(moduleId, { units: updatedUnits });
   };
 
   const handleUpdateStats = async (statsUpdate: Partial<StudyStats>) => {
@@ -1161,6 +1434,12 @@ export default function App() {
 
           <SidebarItem active={activeTab === 'schedule'} onClick={() => setActiveTab('schedule')} icon={<Calendar size={18} />} label="Timetable" count={schedule.length} />
           <SidebarItem active={activeTab === 'marks'} onClick={() => setActiveTab('marks')} icon={<CheckCircle2 size={18} />} label="Marks" />
+          
+          {profile.studentLevel === 'High School' && parseInt(profile.yearGrade) >= 10 && (
+            <SidebarItem active={activeTab === 'university_portal'} onClick={() => setActiveTab('university_portal')} icon={<GraduationCap size={18} />} label="Uni Portal" />
+          )}
+
+          <SidebarItem active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} icon={<Activity size={18} />} label="Analytics" />
           <SidebarItem active={activeTab === 'communities'} onClick={() => setActiveTab('communities')} icon={<Users size={18} />} label="Communities" />
           <SidebarItem active={activeTab === 'sharing'} onClick={() => setActiveTab('sharing')} icon={<Share2 size={18} />} label="Sharing" />
           <SidebarItem active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} icon={<Settings size={18} />} label="Settings" />
@@ -1194,6 +1473,23 @@ export default function App() {
               <p className="text-xs text-slate-400 font-medium">{profile.institution}</p>
             </div>
             <QuoteCard />
+            <div className="bg-indigo-600 p-6 rounded-[2rem] shadow-xl shadow-indigo-100 text-white relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-white/20 transition-all duration-500" />
+              <div className="relative z-10">
+                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center mb-4">
+                  <UserPlus size={20} className="text-white" />
+                </div>
+                <h4 className="font-bold text-lg mb-2">Invite a Friend</h4>
+                <p className="text-xs text-indigo-100 mb-6 leading-relaxed">Know someone who needs a study boost? Share StudyFlow AI with them!</p>
+                <button 
+                  onClick={handleShareApp}
+                  className="w-full py-3 bg-white text-indigo-600 rounded-2xl text-xs font-bold hover:bg-indigo-50 transition-all shadow-lg flex items-center justify-center gap-2"
+                >
+                  <Share2 size={14} />
+                  Share App Link
+                </button>
+              </div>
+            </div>
           </aside>
 
           {/* Content */}
@@ -1203,15 +1499,36 @@ export default function App() {
                 <DashboardView 
                   profile={profile} 
                   schedule={schedule} 
+                  studyLogs={studyLogs}
                   modules={modules} 
                   onExport={handleExport} 
                   setActiveTab={setActiveTab} 
                   onGenerate={generateSmartSchedule}
                   isGenerating={isGenerating}
                   error={scheduleError}
+                  onLogStudy={handleLogStudy}
+                  onDeleteLog={handleDeleteLog}
+                  onUpdateModule={handleUpdateModule}
+                  onShareApp={handleShareApp}
                 />
               )}
-              {activeTab === 'modules' && <ModulesView profile={profile} modules={modules} communities={communities} schedule={schedule} onUpdate={handleUpdateModule} onUpdateStats={handleUpdateStats} onAddAssessment={handleAddAssessment} onRemove={handleRemoveModule} onConfirm={confirmAction} />}
+              {activeTab === 'modules' && (
+                <ModulesView 
+                  profile={profile} 
+                  modules={modules} 
+                  communities={communities} 
+                  schedule={schedule} 
+                  onUpdate={handleUpdateModule} 
+                  onUpdateStats={handleUpdateStats} 
+                  onAddAssessment={handleAddAssessment} 
+                  onRemove={handleRemoveModule} 
+                  onConfirm={confirmAction}
+                  onLogStudy={(moduleId: string) => {
+                    setSelectedLogModuleId(moduleId);
+                    setIsLogStudyModalOpen(true);
+                  }}
+                />
+              )}
               {activeTab === 'schedule' && (
                 <TimetableView 
                   schedule={schedule} 
@@ -1233,6 +1550,22 @@ export default function App() {
                 />
               )}
               {activeTab === 'marks' && <MarksView modules={modules} onUpdate={handleUpdateModule} />}
+              {activeTab === 'analytics' && (
+                <div className="space-y-6">
+                  <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8">
+                    <h2 className="text-2xl font-bold text-slate-800 mb-2">Study Analytics & Progress</h2>
+                    <p className="text-slate-500">Track your study habits, intensity, and module progress in one place.</p>
+                  </div>
+                  <StudyHabitsDashboard 
+                    modules={modules} 
+                    schedule={schedule} 
+                    studyLogs={studyLogs}
+                    onLogStudy={handleLogStudy}
+                    onDeleteLog={handleDeleteLog}
+                    onUpdateUnit={handleUpdateUnit}
+                  />
+                </div>
+              )}
               {activeTab === 'virtual_classroom' && <VirtualClassroomView modules={modules} />}
               {activeTab === 'youtube' && (
                 <div className="space-y-6">
@@ -1304,6 +1637,7 @@ export default function App() {
                   onConfirm={confirmAction}
                 />
               )}
+              {activeTab === 'university_portal' && <UniversityPortal />}
               {activeTab === 'sharing' && <SharingView sharedProfiles={sharedProfiles} onShare={handleShareProfile} />}
               {activeTab === 'settings' && <SettingsView profile={profile} onUpdate={(p) => updateDoc(doc(db, 'users', user.uid), p)} />}
             </AnimatePresence>
@@ -1366,6 +1700,16 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      <LogStudyModal 
+        isOpen={isLogStudyModalOpen} 
+        onClose={() => {
+          setIsLogStudyModalOpen(false);
+          setSelectedLogModuleId(null);
+        }}
+        modules={modules}
+        onLogStudy={handleLogStudy}
+        initialModuleId={selectedLogModuleId}
+      />
       <ConfirmDialog 
         isOpen={confirmDialog.isOpen}
         title={confirmDialog.title}
@@ -1397,7 +1741,11 @@ function AuthScreen() {
         await createUserWithEmailAndPassword(auth, email, password);
       }
     } catch (err: any) {
-      setError(err.message);
+      if (err.code === 'auth/operation-not-allowed') {
+        setError('Email/Password sign-up is not enabled in the Firebase Console. Please enable it at: https://console.firebase.google.com/project/spatial-dryad-442306-g3/authentication/providers');
+      } else {
+        setError(err.message);
+      }
     }
   };
 
@@ -1627,7 +1975,7 @@ function BadgesSection({ profile }: { profile: UserProfile }) {
   );
 }
 
-function DashboardView({ profile, schedule, modules, onExport, setActiveTab, onGenerate, isGenerating, error }: any) {
+function DashboardView({ profile, schedule, studyLogs, modules, onExport, setActiveTab, onGenerate, isGenerating, error, onLogStudy, onDeleteLog, onUpdateModule, onShareApp }: any) {
   const [now, setNow] = useState(new Date());
   
   useEffect(() => {
@@ -1637,6 +1985,17 @@ function DashboardView({ profile, schedule, modules, onExport, setActiveTab, onG
 
   const today = startOfDay(now);
   const hasSchedule = schedule.length > 0;
+
+  const handleUpdateUnit = async (moduleId: string, unitId: string, completed: boolean) => {
+    const module = modules.find((m: any) => m.id === moduleId);
+    if (!module || !module.units) return;
+    
+    const newUnits = module.units.map((u: any) => 
+      u.id === unitId ? { ...u, completed } : u
+    );
+    
+    await onUpdateModule(moduleId, { units: newUnits });
+  };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
@@ -1652,6 +2011,13 @@ function DashboardView({ profile, schedule, modules, onExport, setActiveTab, onG
           </div>
         </div>
         <div className="flex gap-2">
+          <button 
+            onClick={() => onLogStudy()}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 group"
+          >
+            <Plus size={18} className="group-hover:rotate-90 transition-transform" />
+            Log Session
+          </button>
           <ExportMenu onExport={onExport} />
         </div>
       </div>
@@ -1667,17 +2033,27 @@ function DashboardView({ profile, schedule, modules, onExport, setActiveTab, onG
         <AIErrorMessage message={error} onRetry={onGenerate} />
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="lg:col-span-8 space-y-8">
+          {/* Study Habits Visualization Component */}
+          <StudyHabitsDashboard 
+            modules={modules} 
+            schedule={schedule} 
+            studyLogs={studyLogs}
+            onLogStudy={onLogStudy}
+            onDeleteLog={onDeleteLog}
+            onUpdateUnit={handleUpdateUnit}
+          />
+
           <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
             <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
               <Calendar size={20} className="text-indigo-600" />
               Upcoming Sessions
             </h3>
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {schedule
                 .filter((s: any) => isAfter(s.end, now) || isSameDay(s.start, today))
-                .slice(0, 5)
+                .slice(0, 4)
                 .map((item: any) => (
                 <div key={item.id} className="flex items-center gap-4 p-5 rounded-2xl bg-slate-50 border border-slate-100 hover:border-indigo-200 transition-all group">
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-sm ${
@@ -1688,15 +2064,10 @@ function DashboardView({ profile, schedule, modules, onExport, setActiveTab, onG
                     <Clock size={22} />
                   </div>
                   <div className="flex-1">
-                    <p className="font-bold text-slate-800">{item.title}</p>
+                    <p className="font-bold text-slate-800 truncate">{item.title}</p>
                     <p className="text-xs text-slate-400 font-medium">
                       {isToday(item.start) ? 'Today' : isTomorrow(item.start) ? 'Tomorrow' : format(item.start, 'EEEE, MMM d')} • {format(item.start, 'HH:mm')}
                     </p>
-                    {item.moduleId && (
-                      <p className="text-[10px] text-indigo-500 font-bold mt-1 truncate max-w-[200px]">
-                        {modules.find((m: any) => m.id === item.moduleId)?.units?.map((u: any) => u.name).filter(Boolean).join(' • ')}
-                      </p>
-                    )}
                   </div>
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity">
                     <button className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg">
@@ -1706,7 +2077,7 @@ function DashboardView({ profile, schedule, modules, onExport, setActiveTab, onG
                 </div>
               ))}
               {schedule.length === 0 && (
-                <div className="text-center py-12">
+                <div className="col-span-2 text-center py-12">
                   <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Calendar size={32} className="text-slate-200" />
                   </div>
@@ -1715,11 +2086,9 @@ function DashboardView({ profile, schedule, modules, onExport, setActiveTab, onG
               )}
             </div>
           </div>
-
-          <BadgesSection profile={profile} />
         </div>
 
-        <div className="space-y-6">
+        <div className="lg:col-span-4 space-y-6">
           <div className="bg-indigo-600 rounded-[2rem] p-8 text-white shadow-xl shadow-indigo-100 relative overflow-hidden">
             <div className="relative z-10">
               <h3 className="text-xl font-bold mb-2">Study Smart</h3>
@@ -1749,6 +2118,30 @@ function DashboardView({ profile, schedule, modules, onExport, setActiveTab, onG
             <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
           </div>
 
+          {profile.studentLevel === 'High School' && parseInt(profile.yearGrade) >= 10 && (
+            <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-indigo-100 transition-all duration-500" />
+              <div className="relative z-10">
+                <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-6">
+                  <GraduationCap size={24} />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800 mb-2">APS Calculators</h3>
+                <p className="text-sm text-slate-500 leading-relaxed mb-6">
+                  Easily check your APS score and see which universities you qualify for. Explore APS calculators for all South African universities in one place. Perfect for Grade 10 to 12 learners planning their future.
+                </p>
+                <button 
+                  onClick={() => setActiveTab('university_portal')}
+                  className="w-full py-3 bg-indigo-600 text-white rounded-2xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
+                >
+                  Explore Uni Portal
+                  <ArrowRight size={14} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          <BadgesSection profile={profile} />
+
           <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
             <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4">Quick Stats</h3>
             <div className="space-y-4">
@@ -1765,9 +2158,9 @@ function DashboardView({ profile, schedule, modules, onExport, setActiveTab, onG
   );
 }
 
-function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpdateStats, onAddAssessment, onRemove, onConfirm }: any) {
+function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpdateStats, onAddAssessment, onRemove, onConfirm, onLogStudy }: any) {
   const [filter, setFilter] = useState<string>('all');
-  const [moduleDetailTab, setModuleDetailTab] = useState<'ai_suite' | 'youtube' | 'live_lessons'>('ai_suite');
+  const [moduleDetailTab, setModuleDetailTab] = useState<'ai_suite' | 'diagrams' | 'youtube' | 'live_lessons'>('ai_suite');
   const [viewMode, setViewMode] = useState<'list' | 'translator'>('list');
 
   const filteredModules = filter === 'all' 
@@ -1843,6 +2236,7 @@ function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpda
                 onRemove={() => onRemove(module.id)}
                 onConfirm={onConfirm}
                 onViewDetails={() => setFilter(module.id)}
+                onLogStudy={() => onLogStudy(module.id)}
                 isDetailed={filter !== 'all'}
               />
             ))}
@@ -1856,6 +2250,12 @@ function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpda
                 onClick={() => setModuleDetailTab('ai_suite')} 
                 icon={<Sparkles size={16} />} 
                 label="AI Study Suite" 
+              />
+              <TabButton 
+                active={moduleDetailTab === 'diagrams'} 
+                onClick={() => setModuleDetailTab('diagrams')} 
+                icon={<Workflow size={16} />} 
+                label="AI Diagrams" 
               />
               <TabButton 
                 active={moduleDetailTab === 'youtube'} 
@@ -1890,6 +2290,20 @@ function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpda
                     communities={communities}
                     schedule={schedule}
                     onConfirm={onConfirm}
+                  />
+                </motion.div>
+              )}
+              {moduleDetailTab === 'diagrams' && (
+                <motion.div 
+                  key="diagrams"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                >
+                  <DiagramGeneratorView 
+                    profile={profile} 
+                    module={filteredModules[0]} 
+                    onUpdate={(u: any) => onUpdate(filteredModules[0].id, u)} 
                   />
                 </motion.div>
               )}
@@ -2839,7 +3253,7 @@ function SharingView({ sharedProfiles, onShare }: any) {
 }
 
 // --- Mermaid Component ---
-function Mermaid({ chart }: { chart: string }) {
+function Mermaid({ chart, id }: { chart: string, id?: string }) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -2852,7 +3266,7 @@ function Mermaid({ chart }: { chart: string }) {
       ref.current.innerHTML = chart;
       
       try {
-        mermaid.render('mermaid-svg-' + Math.random().toString(36).substr(2, 9), chart).then(({ svg }) => {
+        mermaid.render('mermaid-svg-' + (id || Math.random().toString(36).substr(2, 9)), chart).then(({ svg }) => {
           if (ref.current) {
             ref.current.innerHTML = svg;
           }
@@ -2861,9 +3275,9 @@ function Mermaid({ chart }: { chart: string }) {
         console.error('Mermaid render error:', err);
       }
     }
-  }, [chart]);
+  }, [chart, id]);
 
-  return <div key={chart} ref={ref} className="mermaid flex justify-center py-8 bg-slate-50 rounded-3xl overflow-x-auto" />;
+  return <div id={id} key={chart} ref={ref} className="mermaid flex justify-center py-8 bg-slate-50 rounded-3xl overflow-x-auto" />;
 }
 
 function HomeworkSolverView({ profile, module, onUpdate }: { profile: UserProfile, module?: Module, onUpdate: (updates: Partial<Module>) => void }) {
@@ -3064,6 +3478,7 @@ function DiagramGeneratorView({ profile, module, onUpdate }: { profile: UserProf
   const [error, setError] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editCode, setEditCode] = useState('');
+  const [editPrompt, setEditPrompt] = useState('');
 
   const generateDiagram = async (data: { text: string; image?: string; excelData?: any[] }) => {
     setIsGenerating(true);
@@ -3144,42 +3559,64 @@ function DiagramGeneratorView({ profile, module, onUpdate }: { profile: UserProf
     }
   };
 
-  const handleEdit = (id: string, code: string) => {
+  const handleEdit = (id: string, code: string, prompt: string) => {
     setEditingId(id);
     setEditCode(code);
+    setEditPrompt(prompt);
   };
 
   const saveEdit = () => {
     if (module && editingId) {
       const updatedDiagrams = (module.diagrams || []).map(d => 
-        d.id === editingId ? { ...d, code: editCode } : d
+        d.id === editingId ? { ...d, code: editCode, prompt: editPrompt } : d
       );
       onUpdate({ diagrams: updatedDiagrams });
       setEditingId(null);
     }
   };
 
+  const generateFromNotes = () => {
+    if (module?.notes) {
+      generateDiagram({ text: `Create a comprehensive diagram that summarizes the key concepts and relationships in these module notes: ${module.notes.substring(0, 3000)}` });
+    } else {
+      setError("No module notes found to generate a diagram from.");
+    }
+  };
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
-      <div className="bg-white rounded-[2.5rem] p-10 border border-slate-100 shadow-sm">
-        <h2 className="text-2xl font-bold mb-2">AI Diagram Generator</h2>
-        <p className="text-slate-400 mb-8">Describe a process, system, or flow to generate a visual diagram automatically.</p>
-        
-        {error && (
-          <div className="mb-6">
-            <AIErrorMessage 
-              message={error} 
-              onRetry={() => setError('')} 
-            />
+      <div className="bg-white rounded-[2.5rem] p-10 border border-slate-100 shadow-sm relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
+        <div className="relative z-10">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+                  <Workflow size={20} />
+                </div>
+                AI Diagram Generator
+              </h2>
+              <p className="text-slate-400 mt-2">Describe a process, system, or flow to generate a visual diagram automatically.</p>
+            </div>
+            {module?.notes && (
+              <button 
+                onClick={generateFromNotes}
+                disabled={isGenerating}
+                className="flex items-center gap-2 px-6 py-3 bg-indigo-50 text-indigo-600 rounded-2xl text-xs font-bold hover:bg-indigo-100 transition-all disabled:opacity-50"
+              >
+                <Sparkles size={16} />
+                Generate from Notes
+              </button>
+            )}
           </div>
-        )}
-        
-        <UniversalInput 
-          onProcess={generateDiagram} 
-          isProcessing={isGenerating} 
-          placeholder="Describe the diagram you want to create..."
-          buttonLabel={isGenerating ? "Generating..." : "Generate Diagram"}
-        />
+          
+          <UniversalInput 
+            onProcess={generateDiagram} 
+            isProcessing={isGenerating} 
+            placeholder="Describe the diagram you want to create (e.g., 'A flowchart for photosynthesis' or 'A sequence diagram for user login')..."
+            buttonLabel={isGenerating ? "Generating..." : "Generate Diagram"}
+          />
+        </div>
       </div>
 
       {error && (
@@ -3196,16 +3633,18 @@ function DiagramGeneratorView({ profile, module, onUpdate }: { profile: UserProf
             animate={{ opacity: 1, y: 0 }}
             className="bg-white rounded-[2.5rem] p-10 border border-slate-100 shadow-sm relative group"
           >
-            <div className="absolute top-6 right-6 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute top-8 right-8 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
               <button 
-                onClick={() => handleEdit(item.id, item.code)}
-                className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"
+                onClick={() => handleEdit(item.id, item.code, item.prompt)}
+                className="p-3 bg-white border border-slate-100 rounded-xl text-slate-400 hover:text-indigo-600 shadow-sm hover:shadow-md transition-all"
+                title="Edit Diagram"
               >
                 <Edit3 size={18} />
               </button>
               <button 
                 onClick={() => handleDelete(item.id)}
-                className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                className="p-3 bg-white border border-slate-100 rounded-xl text-slate-400 hover:text-red-500 shadow-sm hover:shadow-md transition-all"
+                title="Delete Diagram"
               >
                 <Trash2 size={18} />
               </button>
@@ -3219,24 +3658,58 @@ function DiagramGeneratorView({ profile, module, onUpdate }: { profile: UserProf
             <div className="h-px bg-slate-50 mb-6" />
 
             {editingId === item.id ? (
-              <div className="space-y-4">
-                <textarea 
-                  value={editCode}
-                  onChange={(e) => setEditCode(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs font-mono min-h-[200px] outline-none"
-                />
-                <div className="flex justify-end gap-2">
-                  <button onClick={() => setEditingId(null)} className="px-4 py-2 text-sm font-bold text-slate-500">Cancel</button>
-                  <button onClick={saveEdit} className="px-4 py-2 text-sm font-bold bg-indigo-600 text-white rounded-xl">Save Changes</button>
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Prompt / Description</label>
+                  <input 
+                    type="text"
+                    value={editPrompt}
+                    onChange={(e) => setEditPrompt(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Mermaid Code</label>
+                  <textarea 
+                    value={editCode}
+                    onChange={(e) => setEditCode(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs font-mono min-h-[300px] outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                </div>
+                <div className="flex justify-end gap-3">
+                  <button onClick={() => setEditingId(null)} className="px-6 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all">Cancel</button>
+                  <button onClick={saveEdit} className="px-8 py-3 text-sm font-bold bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all">Save Changes</button>
                 </div>
               </div>
             ) : (
               <div className="space-y-6">
-                <Mermaid chart={item.code} />
+                <Mermaid chart={item.code} id={`mermaid-svg-${item.id}`} />
                 <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
                   <div className="flex items-center justify-between mb-4">
                     <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Mermaid Code</h4>
-                    <CopyButton text={item.code} className="!bg-white shadow-sm" />
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => {
+                          const svg = document.querySelector(`#mermaid-svg-${item.id} svg`);
+                          if (svg) {
+                            const svgData = new XMLSerializer().serializeToString(svg);
+                            const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+                            const svgUrl = URL.createObjectURL(svgBlob);
+                            const downloadLink = document.createElement('a');
+                            downloadLink.href = svgUrl;
+                            downloadLink.download = `diagram-${item.id}.svg`;
+                            document.body.appendChild(downloadLink);
+                            downloadLink.click();
+                            document.body.removeChild(downloadLink);
+                          }
+                        }}
+                        className="p-2 bg-white border border-slate-100 rounded-xl text-slate-400 hover:text-indigo-600 shadow-sm hover:shadow-md transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest"
+                      >
+                        <Download size={14} />
+                        SVG
+                      </button>
+                      <CopyButton text={item.code} className="!bg-white shadow-sm" />
+                    </div>
                   </div>
                   <div className="bg-white p-4 rounded-xl border border-slate-100 overflow-x-auto">
                     <pre className="text-xs font-mono text-slate-600 leading-relaxed">{item.code}</pre>
@@ -3727,7 +4200,208 @@ function TranslatorView({ module }: { module?: Module }) {
   );
 }
 
+function SlideExplanationView({ module, onUpdate }: { module: Module, onUpdate: (updates: Partial<Module>) => void }) {
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [slides, setSlides] = useState<VideoSlide[]>(module.videoSlides || []);
+  const [audioUrl, setAudioUrl] = useState<string | null>(module.videoAudioUrl || null);
+  const [currentSlide, setCurrentSlide] = useState(0);
+
+  const generateSlides = async () => {
+    if (!module.notes && !module.summary) {
+      setError("Please add some notes or a summary first to generate a video explanation.");
+      return;
+    }
+
+    setIsGenerating(true);
+    setError(null);
+    setStatus('Generating slides and scripts...');
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      
+      // 1. Generate 5 slides
+      const slideResponse = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Create a 5-slide educational video explanation for the module "${module.title}" based on these notes: ${module.summary || module.notes?.substring(0, 5000)}. 
+        For each slide, provide:
+        1. A brief title.
+        2. A short paragraph of text to be displayed on the slide.
+        3. A 10-15 second narration script that explains the slide's content clearly.
+        Return the result as a JSON object with a "slides" array containing objects with "title", "content", and "narration".`,
+        config: { responseMimeType: "application/json" }
+      });
+
+      const data = JSON.parse(slideResponse.text || '{}');
+      if (!data.slides || !Array.isArray(data.slides)) {
+        throw new Error("Failed to generate slides. Please try again.");
+      }
+
+      setSlides(data.slides);
+      setStatus('Synthesizing narration audio...');
+
+      // 2. Synthesize audio for all narrations
+      // We'll combine all narrations into one audio file for simplicity, or generate them individually.
+      // The prompt says "Synthesize the narration into an audio file", which implies one.
+      const fullNarration = data.slides.map((s: any, i: number) => `Slide ${i + 1}: ${s.narration}`).join('. ');
+      
+      const ttsResponse = await ai.models.generateContent({
+        model: "gemini-2.5-flash-preview-tts",
+        contents: [{ parts: [{ text: fullNarration }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: 'Kore' },
+            },
+          },
+        },
+      });
+
+      const base64Audio = ttsResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (base64Audio) {
+        const audioBlobUrl = addWavHeader(base64Audio);
+        setAudioUrl(audioBlobUrl);
+        onUpdate({ videoSlides: data.slides, videoAudioUrl: audioBlobUrl });
+        setStatus('Explanation generated successfully!');
+      } else {
+        throw new Error("Failed to generate audio narration.");
+      }
+    } catch (err: any) {
+      console.error('Slide generation error:', err);
+      setError(err.message || "Failed to generate video explanation. Please try again.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8 space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+              <Layers size={24} />
+            </div>
+            <div>
+              <h4 className="text-xl font-bold text-slate-800">5-Slide Video Explanation</h4>
+              <p className="text-sm text-slate-400">AI-generated slides and narration for your module.</p>
+            </div>
+          </div>
+          <button
+            onClick={generateSlides}
+            disabled={isGenerating}
+            className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-lg hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center gap-2"
+          >
+            {isGenerating ? <RotateCcw className="animate-spin" size={16} /> : <Sparkles size={16} />}
+            {slides.length > 0 ? 'Regenerate' : 'Generate Explanation'}
+          </button>
+        </div>
+
+        {error && (
+          <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-sm font-medium flex items-center gap-2 border border-red-100">
+            <AlertCircle size={16} />
+            {error}
+          </div>
+        )}
+
+        {isGenerating && (
+          <div className="text-center py-12 space-y-4">
+            <div className="flex justify-center gap-2">
+              <motion.div animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5 }} className="w-3 h-3 bg-indigo-600 rounded-full" />
+              <motion.div animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.3 }} className="w-3 h-3 bg-indigo-600 rounded-full" />
+              <motion.div animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.6 }} className="w-3 h-3 bg-indigo-600 rounded-full" />
+            </div>
+            <p className="text-sm font-bold text-slate-600 animate-pulse">{status}</p>
+          </div>
+        )}
+
+        {slides.length > 0 && !isGenerating && (
+          <div className="space-y-8">
+            <div className="relative aspect-video bg-slate-900 rounded-[2rem] overflow-hidden shadow-2xl flex items-center justify-center p-12 text-center text-white">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={currentSlide}
+                  initial={{ opacity: 0, x: 50 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -50 }}
+                  className="space-y-6 max-w-2xl"
+                >
+                  <h5 className="text-3xl font-black tracking-tight text-indigo-400">{slides[currentSlide].title}</h5>
+                  <p className="text-xl leading-relaxed font-medium">{slides[currentSlide].content}</p>
+                </motion.div>
+              </AnimatePresence>
+              
+              <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4">
+                <button 
+                  onClick={() => setCurrentSlide(prev => Math.max(0, prev - 1))}
+                  disabled={currentSlide === 0}
+                  className="p-3 bg-white/10 hover:bg-white/20 rounded-full text-white disabled:opacity-30 transition-all"
+                >
+                  <ChevronLeft size={24} />
+                </button>
+                <div className="flex gap-2">
+                  {slides.map((_, i) => (
+                    <div 
+                      key={i} 
+                      className={`w-2 h-2 rounded-full transition-all ${i === currentSlide ? 'bg-indigo-500 w-6' : 'bg-white/30'}`} 
+                    />
+                  ))}
+                </div>
+                <button 
+                  onClick={() => setCurrentSlide(prev => Math.min(slides.length - 1, prev + 1))}
+                  disabled={currentSlide === slides.length - 1}
+                  className="p-3 bg-white/10 hover:bg-white/20 rounded-full text-white disabled:opacity-30 transition-all"
+                >
+                  <ChevronRight size={24} />
+                </button>
+              </div>
+              
+              <div className="absolute top-8 right-8 text-xs font-bold text-white/40 uppercase tracking-widest">
+                Slide {currentSlide + 1} / {slides.length}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-slate-50 rounded-3xl p-6 border border-slate-100">
+                <h6 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <Mic size={14} className="text-indigo-600" />
+                  Narration Script
+                </h6>
+                <p className="text-sm text-slate-600 leading-relaxed italic">
+                  "{slides[currentSlide].narration}"
+                </p>
+              </div>
+              
+              <div className="bg-indigo-50 rounded-3xl p-6 border border-indigo-100 flex flex-col justify-center items-center text-center space-y-4">
+                <h6 className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Full Audio Narration</h6>
+                {audioUrl ? (
+                  <>
+                    <audio src={audioUrl} controls className="w-full" />
+                    <a 
+                      href={audioUrl} 
+                      download={`${module.title}_explanation.wav`}
+                      className="flex items-center gap-2 text-indigo-600 font-bold text-xs hover:underline"
+                    >
+                      <Download size={14} />
+                      Download Audio File
+                    </a>
+                  </>
+                ) : (
+                  <p className="text-xs text-indigo-300 italic">Audio not generated yet.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function VideoGeneratorView({ module, onUpdate }: { module: Module, onUpdate: (updates: Partial<Module>) => void }) {
+  const [activeSubTab, setActiveSubTab] = useState<'veo' | 'slides'>('slides');
   const [isGenerating, setIsGenerating] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -3820,64 +4494,89 @@ function VideoGeneratorView({ module, onUpdate }: { module: Module, onUpdate: (u
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8 space-y-6">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
-            <Video size={24} />
-          </div>
-          <div>
-            <h4 className="text-xl font-bold text-slate-800">AI Video Lesson Generator</h4>
-            <p className="text-sm text-slate-400">Create short, visual AI-narrated explanations from your notes.</p>
-          </div>
-        </div>
-
-        {error && (
-          <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-sm font-medium flex items-center gap-2 border border-red-100">
-            <AlertCircle size={16} />
-            {error}
-          </div>
-        )}
-
-        <div className="aspect-video bg-slate-50 rounded-[2rem] border border-dashed border-slate-200 flex flex-col items-center justify-center overflow-hidden relative">
-          {videoUrl ? (
-            <video src={videoUrl} controls className="w-full h-full object-cover" />
-          ) : isGenerating ? (
-            <div className="text-center space-y-4">
-              <div className="flex justify-center gap-2">
-                <motion.div animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5 }} className="w-3 h-3 bg-indigo-600 rounded-full" />
-                <motion.div animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.3 }} className="w-3 h-3 bg-indigo-600 rounded-full" />
-                <motion.div animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.6 }} className="w-3 h-3 bg-indigo-600 rounded-full" />
-              </div>
-              <p className="text-sm font-bold text-slate-600 animate-pulse">{status}</p>
-              <p className="text-[10px] text-slate-400 italic">This usually takes 60-90 seconds</p>
-            </div>
-          ) : (
-            <div className="text-center space-y-4 px-8">
-              <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto shadow-sm text-slate-300">
-                <Play size={32} />
-              </div>
-              <p className="text-sm text-slate-400 font-medium">No video generated yet. Click the button below to create a visual lesson from your study materials.</p>
-            </div>
-          )}
-        </div>
-
-        <div className="flex justify-center">
-          <button
-            onClick={generateVideo}
-            disabled={isGenerating}
-            className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-bold text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center gap-2"
-          >
-            {isGenerating ? <RotateCcw className="animate-spin" size={18} /> : <Sparkles size={18} />}
-            {videoUrl ? 'Regenerate Video Lesson' : 'Generate AI Video Lesson'}
-          </button>
-        </div>
-
-        <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100">
-          <p className="text-[10px] text-indigo-600 font-medium leading-relaxed">
-            <strong>Note:</strong> This feature uses Veo, a state-of-the-art video generation model. It requires a paid Gemini API key from a Google Cloud project with billing enabled.
-          </p>
-        </div>
+      <div className="flex bg-white p-1 rounded-2xl border border-slate-100 shadow-sm w-fit">
+        <button 
+          onClick={() => setActiveSubTab('slides')}
+          className={`px-6 py-2 rounded-xl text-xs font-bold transition-all ${activeSubTab === 'slides' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-500 hover:bg-slate-50'}`}
+        >
+          Slide Explanation
+        </button>
+        <button 
+          onClick={() => setActiveSubTab('veo')}
+          className={`px-6 py-2 rounded-xl text-xs font-bold transition-all ${activeSubTab === 'veo' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-500 hover:bg-slate-50'}`}
+        >
+          AI Video (Veo)
+        </button>
       </div>
+
+      <AnimatePresence mode="wait">
+        {activeSubTab === 'slides' ? (
+          <motion.div key="slides" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
+            <SlideExplanationView module={module} onUpdate={onUpdate} />
+          </motion.div>
+        ) : (
+          <motion.div key="veo" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8 space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+                  <Video size={24} />
+                </div>
+                <div>
+                  <h4 className="text-xl font-bold text-slate-800">AI Video Lesson Generator</h4>
+                  <p className="text-sm text-slate-400">Create short, visual AI-narrated explanations from your notes.</p>
+                </div>
+              </div>
+
+              {error && (
+                <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-sm font-medium flex items-center gap-2 border border-red-100">
+                  <AlertCircle size={16} />
+                  {error}
+                </div>
+              )}
+
+              <div className="aspect-video bg-slate-50 rounded-[2rem] border border-dashed border-slate-200 flex flex-col items-center justify-center overflow-hidden relative">
+                {videoUrl ? (
+                  <video src={videoUrl} controls className="w-full h-full object-cover" />
+                ) : isGenerating ? (
+                  <div className="text-center space-y-4">
+                    <div className="flex justify-center gap-2">
+                      <motion.div animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5 }} className="w-3 h-3 bg-indigo-600 rounded-full" />
+                      <motion.div animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.3 }} className="w-3 h-3 bg-indigo-600 rounded-full" />
+                      <motion.div animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.6 }} className="w-3 h-3 bg-indigo-600 rounded-full" />
+                    </div>
+                    <p className="text-sm font-bold text-slate-600 animate-pulse">{status}</p>
+                    <p className="text-[10px] text-slate-400 italic">This usually takes 60-90 seconds</p>
+                  </div>
+                ) : (
+                  <div className="text-center space-y-4 px-8">
+                    <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto shadow-sm text-slate-300">
+                      <Play size={32} />
+                    </div>
+                    <p className="text-sm text-slate-400 font-medium">No video generated yet. Click the button below to create a visual lesson from your study materials.</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-center">
+                <button
+                  onClick={generateVideo}
+                  disabled={isGenerating}
+                  className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-bold text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isGenerating ? <RotateCcw className="animate-spin" size={18} /> : <Sparkles size={18} />}
+                  {videoUrl ? 'Regenerate Video Lesson' : 'Generate AI Video Lesson'}
+                </button>
+              </div>
+
+              <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100">
+                <p className="text-[10px] text-indigo-600 font-medium leading-relaxed">
+                  <strong>Note:</strong> This feature uses Veo, a state-of-the-art video generation model. It requires a paid Gemini API key from a Google Cloud project with billing enabled.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -4904,6 +5603,32 @@ function AIStudyAssistant({ profile, module, onUpdate, onConfirm }: {
     { label: 'Study Tips', icon: <Sparkles size={14} />, prompt: 'Give me 3 personalized study tips for this module based on my profile.', type: 'tip' as const },
   ];
 
+  const handleClear = () => {
+    onConfirm(
+      "Clear Chat History",
+      "Are you sure you want to clear the current chat history? This action cannot be undone.",
+      () => setMessages([])
+    );
+  };
+
+  const handleSaveChat = () => {
+    if (messages.length === 0) return;
+    
+    const chatText = messages.map(m => 
+      `${m.role.toUpperCase()}: ${m.text}\n`
+    ).join('\n---\n\n');
+    
+    const blob = new Blob([chatText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${module.title}_Study_Chat_${new Date().toLocaleDateString()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="flex flex-col h-[600px] bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
       <div className="p-6 border-b border-slate-100 bg-indigo-50/30 flex items-center justify-between">
@@ -4915,6 +5640,24 @@ function AIStudyAssistant({ profile, module, onUpdate, onConfirm }: {
             <h5 className="font-bold text-slate-800">AI Study Assistant</h5>
             <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Personalized Learning Partner</p>
           </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSaveChat}
+            disabled={messages.length === 0}
+            className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-xl transition-all disabled:opacity-30"
+            title="Save Chat History"
+          >
+            <Download size={18} />
+          </button>
+          <button
+            onClick={handleClear}
+            disabled={messages.length === 0}
+            className="p-2.5 text-slate-400 hover:text-rose-600 hover:bg-white rounded-xl transition-all disabled:opacity-30"
+            title="Clear Chat"
+          >
+            <RotateCcw size={18} />
+          </button>
         </div>
       </div>
 
@@ -5991,7 +6734,7 @@ function StudyMaterials({ module, onUpdate, onUpdateStats, profile, modules, com
   schedule: ScheduleItem[],
   onConfirm: (title: string, message: string, onConfirm: () => void) => void
 }) {
-  const [activeTab, setActiveTab] = useState<'units' | 'summary' | 'flashcards' | 'quiz' | 'chat' | 'exams' | 'voice' | 'homework' | 'diagram' | 'mindmap' | 'generalChat' | 'youtube' | 'translator' | 'resources' | 'video' | 'pronunciation' | 'virtual_classroom' | 'grades' | 'aiAssistant'>(module.units?.length ? 'units' : (module.notes ? 'summary' : 'units'));
+  const [activeTab, setActiveTab] = useState<'units' | 'summary' | 'flashcards' | 'quiz' | 'chat' | 'exams' | 'voice' | 'homework' | 'mindmap' | 'generalChat' | 'youtube' | 'translator' | 'resources' | 'video' | 'pronunciation' | 'virtual_classroom' | 'grades' | 'aiAssistant'>(module.units?.length ? 'units' : (module.notes ? 'summary' : 'units'));
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isGeneratingFlashcards, setIsGeneratingFlashcards] = useState(false);
@@ -6007,6 +6750,13 @@ function StudyMaterials({ module, onUpdate, onUpdateStats, profile, modules, com
   const [sharingResource, setSharingResource] = useState<UnitResource | null>(null);
   const [expandedUnitId, setExpandedUnitId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const stats = useMemo(() => {
+    const units = module.units || [];
+    const completedUnits = units.filter(u => u.completed).length;
+    const unitProgress = units.length > 0 ? Math.round((completedUnits / units.length) * 100) : 0;
+    return { completedUnits, unitProgress, totalUnits: units.length };
+  }, [module.units]);
 
   const selectedUnit = module.units?.find(u => u.id === selectedUnitId);
   const currentNotes = selectedUnit ? selectedUnit.notes : module.notes;
@@ -6193,7 +6943,6 @@ function StudyMaterials({ module, onUpdate, onUpdateStats, profile, modules, com
     { id: 'exams', label: 'Practice Exams', icon: <Award size={16} /> },
     { id: 'voice', label: 'Voice Tutor', icon: <Volume2 size={16} /> },
     { id: 'homework', label: 'Homework Solver', icon: <FileText size={16} /> },
-    { id: 'diagram', label: 'Diagram Generator', icon: <Workflow size={16} /> },
     { id: 'mindmap', label: 'Mind Map Creator', icon: <Network size={16} /> },
     { id: 'generalChat', label: 'AI Study Chat', icon: <MessageSquare size={16} /> },
     { id: 'video', label: 'Video Generator', icon: <Video size={16} /> },
@@ -6604,29 +7353,44 @@ function StudyMaterials({ module, onUpdate, onUpdateStats, profile, modules, com
           </div>
           <div>
             <h4 className="text-xl font-bold text-slate-800">AI Study Suite</h4>
-            <div className="flex items-center gap-2 mt-1">
-              <select 
-                value={selectedUnitId || ''} 
-                onChange={(e) => setSelectedUnitId(e.target.value || null)}
-                className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border-none outline-none cursor-pointer hover:bg-indigo-100 transition-colors"
-              >
-                <option value="">Module Overview</option>
-                {module.units?.map(unit => (
-                  <option key={unit.id} value={unit.id}>Unit {unit.unitNumber}: {unit.name}</option>
-                ))}
-              </select>
-              <button
-                onClick={() => onUpdate({ isLanguage: !isLanguageModule(module) })}
-                className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
-                  isLanguageModule(module)
-                    ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
-                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                }`}
-                title={isLanguageModule(module) ? "Mark as non-language module" : "Mark as language module"}
-              >
-                <Languages size={12} />
-                {isLanguageModule(module) ? 'Language' : 'General'}
-              </button>
+            <div className="flex items-center gap-4 mt-1">
+              <div className="flex items-center gap-2">
+                <select 
+                  value={selectedUnitId || ''} 
+                  onChange={(e) => setSelectedUnitId(e.target.value || null)}
+                  className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border-none outline-none cursor-pointer hover:bg-indigo-100 transition-colors"
+                >
+                  <option value="">Module Overview</option>
+                  {module.units?.map(unit => (
+                    <option key={unit.id} value={unit.id}>Unit {unit.unitNumber}: {unit.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => onUpdate({ isLanguage: !isLanguageModule(module) })}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                    isLanguageModule(module)
+                      ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
+                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                  }`}
+                  title={isLanguageModule(module) ? "Mark as non-language module" : "Mark as language module"}
+                >
+                  <Languages size={12} />
+                  {isLanguageModule(module) ? 'Language' : 'General'}
+                </button>
+              </div>
+
+              {module.units && module.units.length > 0 && (
+                <div className="flex items-center gap-3">
+                  <div className="h-1.5 w-32 bg-slate-100 rounded-full overflow-hidden">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${stats.unitProgress}%` }}
+                      className="h-full bg-indigo-500"
+                    />
+                  </div>
+                  <span className="text-[10px] font-bold text-indigo-600">{stats.unitProgress}% Complete</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -6741,6 +7505,16 @@ function StudyMaterials({ module, onUpdate, onUpdateStats, profile, modules, com
                     </button>
                     <button 
                       onClick={() => {
+                        const newUnits = (module.units || []).map(u => ({ ...u, completed: true }));
+                        onUpdate({ units: newUnits });
+                      }}
+                      className="flex items-center gap-2 px-6 py-3 bg-emerald-50 text-emerald-600 rounded-2xl text-xs font-bold hover:bg-emerald-100 transition-all"
+                    >
+                      <CheckCircle2 size={16} />
+                      Mark All Completed
+                    </button>
+                    <button 
+                      onClick={() => {
                         const newUnit = { 
                           id: Math.random().toString(36).substr(2, 9), 
                           unitNumber: (module.units?.length || 0) + 1 + '', 
@@ -6829,17 +7603,19 @@ function StudyMaterials({ module, onUpdate, onUpdateStats, profile, modules, com
                       <div className="group flex items-center gap-4 p-6">
                         <button 
                           onClick={() => {
-                            const newUnits = [...(module.units || [])];
-                            newUnits[idx].completed = !newUnits[idx].completed;
+                            const newUnits = (module.units || []).map((u, i) => 
+                              i === idx ? { ...u, completed: !u.completed } : u
+                            );
                             onUpdate({ units: newUnits });
                           }}
-                          className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center transition-all shrink-0 ${
+                          className={`w-10 h-10 rounded-2xl border-2 flex items-center justify-center transition-all shrink-0 shadow-sm ${
                             unit.completed 
-                              ? 'bg-emerald-500 border-emerald-500 text-white' 
-                              : 'border-slate-200 hover:border-indigo-400 bg-white'
+                              ? 'bg-emerald-500 border-emerald-500 text-white shadow-emerald-100' 
+                              : 'border-slate-200 hover:border-indigo-400 bg-white hover:bg-indigo-50'
                           }`}
+                          title={unit.completed ? "Mark as incomplete" : "Mark as complete"}
                         >
-                          {unit.completed && <Check size={18} strokeWidth={3} />}
+                          {unit.completed ? <CheckCircle2 size={20} strokeWidth={2.5} /> : <Square size={20} className="text-slate-300" />}
                         </button>
                         
                         <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
@@ -7417,8 +8193,9 @@ function StudyMaterials({ module, onUpdate, onUpdateStats, profile, modules, com
                       card={card} 
                       index={idx} 
                       onUpdate={(updates) => {
-                        const newCards = [...(currentFlashcards || [])];
-                        newCards[idx] = { ...newCards[idx], ...updates };
+                        const newCards = (currentFlashcards || []).map((c, i) => 
+                          i === idx ? { ...c, ...updates } : c
+                        );
                         handleUpdate({ flashcards: newCards });
                       }}
                       onDelete={() => {
@@ -7486,11 +8263,6 @@ function StudyMaterials({ module, onUpdate, onUpdateStats, profile, modules, com
             </motion.div>
           )}
 
-          {activeTab === 'diagram' && (
-            <motion.div key="diagram" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-              <DiagramGeneratorView profile={profile} module={module} onUpdate={onUpdate} />
-            </motion.div>
-          )}
 
           {activeTab === 'mindmap' && (
             <motion.div key="mindmap" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
@@ -7833,7 +8605,129 @@ function ModuleVoiceTutor({ profile, module, onUpdate, communities, handleShareT
   const [localPitch, setLocalPitch] = useState(profile?.voiceTutorSettings?.pitch ?? 0);
   const [showSettings, setShowSettings] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isConversationMode, setIsConversationMode] = useState(false);
+  const [conversation, setConversation] = useState<{ role: 'user' | 'tutor', text: string, audioUrl?: string }[]>([]);
+  const [userInput, setUserInput] = useState('');
+  const [isListening, setIsListening] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [conversation]);
+
+  const startConversation = () => {
+    setIsConversationMode(true);
+    if (conversation.length === 0) {
+      const initialMessage = `Hello ${profile?.firstName || 'Student'}! I'm your ${selectedLanguage} voice tutor for ${module.title}. What would you like to discuss or learn about today?`;
+      handleTutorResponse(initialMessage);
+    }
+  };
+
+  const handleTutorResponse = async (text: string) => {
+    setIsGenerating(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const ttsResponse = await ai.models.generateContent({
+        model: "gemini-2.5-flash-preview-tts",
+        contents: [{ parts: [{ text: `TTS: ${text}` }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: { 
+              prebuiltVoiceConfig: { 
+                voiceName: localVoiceName as any
+              } 
+            }
+          }
+        }
+      });
+
+      const base64Audio = ttsResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      const audioUrl = base64Audio ? addWavHeader(base64Audio) : undefined;
+      
+      setConversation(prev => [...prev, { role: 'tutor', text, audioUrl }]);
+      
+      if (audioUrl) {
+        setCurrentAudioUrl(audioUrl);
+        setCurrentTranscript(text);
+        setIsPlaying(true);
+      }
+    } catch (err) {
+      console.error("Tutor response error:", err);
+      setConversation(prev => [...prev, { role: 'tutor', text }]);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const sendMessage = async (text: string) => {
+    if (!text.trim()) return;
+    
+    const userMsg = text.trim();
+    setConversation(prev => [...prev, { role: 'user', text: userMsg }]);
+    setUserInput('');
+    setIsGenerating(true);
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const chatResponse = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [
+          { role: 'user', parts: [{ text: `You are a friendly AI voice tutor for the module "${module.title}". Respond to the student's message in ${selectedLanguage}. Keep it conversational and educational. 
+          
+          Context:
+          ${module.notes ? `Module Notes: ${module.notes.substring(0, 2000)}` : ''}
+          
+          Conversation History:
+          ${conversation.map(c => `${c.role}: ${c.text}`).join('\n')}
+          
+          Student: ${userMsg}` }] }
+        ],
+      });
+
+      const responseText = chatResponse.text || "I'm sorry, I couldn't process that. Could you try again?";
+      await handleTutorResponse(responseText);
+    } catch (err: any) {
+      console.error("Send message error:", err);
+      setError("Failed to get a response from the tutor.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const toggleListening = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setError("Speech recognition is not supported in this browser.");
+      return;
+    }
+
+    if (isListening) {
+      setIsListening(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = selectedLanguage === 'English' ? 'en-US' : 'en-ZA'; // Defaulting to English variants for now
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error:", event.error);
+      setIsListening(false);
+    };
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      sendMessage(transcript);
+    };
+
+    recognition.start();
+  };
 
   const voiceSettings = profile?.voiceTutorSettings || {
     voiceName: 'Zephyr',
@@ -8025,6 +8919,13 @@ function ModuleVoiceTutor({ profile, module, onUpdate, communities, handleShareT
           
           <div className="flex flex-wrap items-center gap-3">
             <button 
+              onClick={() => isConversationMode ? setIsConversationMode(false) : startConversation()}
+              className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-xs font-bold transition-all shadow-lg ${isConversationMode ? 'bg-emerald-600 text-white shadow-emerald-100' : 'bg-indigo-600 text-white shadow-indigo-100 hover:bg-indigo-700'}`}
+            >
+              {isConversationMode ? <X size={16} /> : <MessageSquare size={16} />}
+              {isConversationMode ? 'End Conversation' : 'Start Interactive Session'}
+            </button>
+            <button 
               onClick={() => setShowSettings(!showSettings)}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${showSettings ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
             >
@@ -8054,86 +8955,166 @@ function ModuleVoiceTutor({ profile, module, onUpdate, communities, handleShareT
 
         {error && (
           <div className="mb-8">
-            <AIErrorMessage message={error} onRetry={() => startLesson({ text: module.notes || '' })} />
+            <AIErrorMessage message={error} onRetry={() => isConversationMode ? startConversation() : startLesson({ text: module.notes || '' })} />
           </div>
         )}
 
-        <AnimatePresence>
-          {showSettings && (
-            <motion.div 
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden mb-8"
+        {isConversationMode ? (
+          <div className="space-y-6">
+            <div 
+              ref={scrollRef}
+              className="h-[400px] overflow-y-auto p-6 bg-slate-50 rounded-[2.5rem] border border-slate-100 space-y-4 custom-scrollbar"
             >
-              <div className="p-6 bg-slate-50 rounded-3xl grid grid-cols-1 md:grid-cols-3 gap-6 border border-slate-100">
-                <div className="space-y-3">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Voice Model</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {['Zephyr', 'Kore', 'Puck', 'Charon', 'Fenrir'].map((voice) => (
-                      <button
-                        key={voice}
-                        onClick={() => setLocalVoiceName(voice as any)}
-                        className={`px-3 py-2 rounded-xl text-[10px] font-bold transition-all border ${
-                          localVoiceName === voice 
-                            ? 'bg-indigo-600 text-white border-indigo-600' 
-                            : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+              {conversation.map((msg, idx) => (
+                <motion.div 
+                  key={idx}
+                  initial={{ opacity: 0, x: msg.role === 'user' ? 20 : -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div className={`max-w-[80%] p-4 rounded-3xl text-sm font-medium shadow-sm ${
+                    msg.role === 'user' 
+                      ? 'bg-indigo-600 text-white rounded-tr-none' 
+                      : 'bg-white text-slate-700 border border-slate-100 rounded-tl-none'
+                  }`}>
+                    <p>{msg.text}</p>
+                    {msg.audioUrl && (
+                      <button 
+                        onClick={() => {
+                          setCurrentAudioUrl(msg.audioUrl!);
+                          setCurrentTranscript(msg.text);
+                          setIsPlaying(true);
+                        }}
+                        className={`mt-2 p-2 rounded-full flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all ${
+                          msg.role === 'user' ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
                         }`}
                       >
-                        {voice}
+                        <Volume2 size={12} />
+                        Replay Voice
                       </button>
-                    ))}
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+              {isGenerating && (
+                <div className="flex justify-start">
+                  <div className="bg-white p-4 rounded-3xl rounded-tl-none border border-slate-100 shadow-sm">
+                    <div className="flex gap-1">
+                      <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="w-1.5 h-1.5 bg-indigo-400 rounded-full" />
+                      <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ repeat: Infinity, duration: 1, delay: 0.2 }} className="w-1.5 h-1.5 bg-indigo-400 rounded-full" />
+                      <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ repeat: Infinity, duration: 1, delay: 0.4 }} className="w-1.5 h-1.5 bg-indigo-400 rounded-full" />
+                    </div>
                   </div>
                 </div>
+              )}
+            </div>
 
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Speaking Rate</label>
-                    <span className="text-[10px] font-bold text-indigo-600">{localSpeakingRate}x</span>
-                  </div>
-                  <input 
-                    type="range" min="0.5" max="2.0" step="0.1"
-                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                    value={localSpeakingRate}
-                    onChange={(e) => setLocalSpeakingRate(parseFloat(e.target.value))}
-                  />
-                  <div className="flex justify-between text-[8px] text-slate-400 font-bold uppercase">
-                    <span>Slower</span>
-                    <span>Faster</span>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pitch</label>
-                    <span className="text-[10px] font-bold text-indigo-600">{localPitch > 0 ? '+' : ''}{localPitch}</span>
-                  </div>
-                  <input 
-                    type="range" min="-10" max="10" step="1"
-                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                    value={localPitch}
-                    onChange={(e) => setLocalPitch(parseInt(e.target.value))}
-                  />
-                  <div className="flex justify-between text-[8px] text-slate-400 font-bold uppercase">
-                    <span>Lower</span>
-                    <span>Higher</span>
-                  </div>
-                </div>
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1">
+                <input 
+                  type="text"
+                  value={userInput}
+                  onChange={(e) => setUserInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && sendMessage(userInput)}
+                  placeholder={`Talk to your ${selectedLanguage} tutor...`}
+                  className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all pr-12"
+                />
+                <button 
+                  onClick={toggleListening}
+                  className={`absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-xl transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-slate-400 hover:text-indigo-600'}`}
+                >
+                  <Mic size={20} />
+                </button>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              <button 
+                onClick={() => sendMessage(userInput)}
+                disabled={!userInput.trim() || isGenerating}
+                className="p-4 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50"
+              >
+                <Send size={20} />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <AnimatePresence>
+              {showSettings && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden mb-8"
+                >
+                  <div className="p-6 bg-slate-50 rounded-3xl grid grid-cols-1 md:grid-cols-3 gap-6 border border-slate-100">
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Voice Model</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {['Zephyr', 'Kore', 'Puck', 'Charon', 'Fenrir'].map((voice) => (
+                          <button
+                            key={voice}
+                            onClick={() => setLocalVoiceName(voice as any)}
+                            className={`px-3 py-2 rounded-xl text-[10px] font-bold transition-all border ${
+                              localVoiceName === voice 
+                                ? 'bg-indigo-600 text-white border-indigo-600' 
+                                : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                            }`}
+                          >
+                            {voice}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
-        <p className="text-slate-500 text-sm mb-8 leading-relaxed">
-          Upload your study materials or paste a complex concept below. Your AI Voice Tutor will synthesize a personalized audio lesson in <b>{selectedLanguage}</b> to help you understand better through listening.
-        </p>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Speaking Rate</label>
+                        <span className="text-[10px] font-bold text-indigo-600">{localSpeakingRate}x</span>
+                      </div>
+                      <input 
+                        type="range" min="0.5" max="2.0" step="0.1"
+                        className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                        value={localSpeakingRate}
+                        onChange={(e) => setLocalSpeakingRate(parseFloat(e.target.value))}
+                      />
+                      <div className="flex justify-between text-[8px] text-slate-400 font-bold uppercase">
+                        <span>Slower</span>
+                        <span>Faster</span>
+                      </div>
+                    </div>
 
-        <UniversalInput 
-          onProcess={startLesson} 
-          isProcessing={isGenerating} 
-          placeholder={`What would you like the tutor to explain in ${selectedLanguage}? Paste text or upload files...`}
-          buttonLabel={isGenerating ? "Synthesizing Lesson..." : `Generate ${selectedLanguage} Lesson`}
-        />
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pitch</label>
+                        <span className="text-[10px] font-bold text-indigo-600">{localPitch > 0 ? '+' : ''}{localPitch}</span>
+                      </div>
+                      <input 
+                        type="range" min="-10" max="10" step="1"
+                        className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                        value={localPitch}
+                        onChange={(e) => setLocalPitch(parseInt(e.target.value))}
+                      />
+                      <div className="flex justify-between text-[8px] text-slate-400 font-bold uppercase">
+                        <span>Lower</span>
+                        <span>Higher</span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <p className="text-slate-500 text-sm mb-8 leading-relaxed">
+              Upload your study materials or paste a complex concept below. Your AI Voice Tutor will synthesize a personalized audio lesson in <b>{selectedLanguage}</b> to help you understand better through listening.
+            </p>
+
+            <UniversalInput 
+              onProcess={startLesson} 
+              isProcessing={isGenerating} 
+              placeholder={`What would you like the tutor to explain in ${selectedLanguage}? Paste text or upload files...`}
+              buttonLabel={isGenerating ? "Synthesizing Lesson..." : `Generate ${selectedLanguage} Lesson`}
+            />
+          </>
+        )}
       </div>
 
       {currentAudioUrl && (
@@ -8466,7 +9447,7 @@ function VideoExplanationGenerator({ module }: { module: Module }) {
     </div>
   );
 }
-function ModuleCard({ module, profile, modules, communities, schedule, onUpdate, onAddAssessment, onRemove, onConfirm, onViewDetails, isDetailed }: any) {
+function ModuleCard({ module, profile, modules, communities, schedule, onUpdate, onAddAssessment, onRemove, onConfirm, onViewDetails, onLogStudy, isDetailed }: any) {
   const [isEditing, setIsEditing] = useState(false);
   const [localModule, setLocalModule] = useState(module);
   const [isUnitsOpen, setIsUnitsOpen] = useState(false);
@@ -8651,13 +9632,22 @@ function ModuleCard({ module, profile, modules, communities, schedule, onUpdate,
               )}
               <div className="flex items-center gap-3">
                 {!isDetailed && (
-                  <button 
-                    onClick={onViewDetails}
-                    className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 group/btn"
-                  >
-                    View Details
-                    <ArrowRight size={18} className="group-hover/btn:translate-x-1 transition-transform" />
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={onLogStudy}
+                      className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-6 py-3 rounded-2xl text-sm font-bold hover:bg-indigo-100 transition-all group/log"
+                    >
+                      <Clock size={18} className="group-hover/log:scale-110 transition-transform" />
+                      Log Study
+                    </button>
+                    <button 
+                      onClick={onViewDetails}
+                      className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 group/btn"
+                    >
+                      View Details
+                      <ArrowRight size={18} className="group-hover/btn:translate-x-1 transition-transform" />
+                    </button>
+                  </div>
                 )}
                 {isEditing ? (
                   <div className="flex items-center gap-2">
@@ -8935,8 +9925,9 @@ function ModuleCard({ module, profile, modules, communities, schedule, onUpdate,
                     <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest mb-1 block">Title</label>
                     {isEditing ? (
                       <input className="w-full bg-slate-50 border-none rounded-xl text-sm py-2.5 px-4 focus:ring-1 focus:ring-indigo-500" value={a.title} onChange={(e) => {
-                        const newAss = [...localModule.assessments];
-                        newAss[idx].title = e.target.value;
+                        const newAss = localModule.assessments.map((ass: any, i: number) => 
+                          i === idx ? { ...ass, title: e.target.value } : ass
+                        );
                         updateLocal({ assessments: newAss });
                       }} />
                     ) : (
@@ -8948,13 +9939,15 @@ function ModuleCard({ module, profile, modules, communities, schedule, onUpdate,
                     {isEditing ? (
                       <div className="flex flex-col gap-2">
                         <input type="date" className="w-full bg-slate-50 border-none rounded-xl text-sm py-2.5 px-4 focus:ring-1 focus:ring-indigo-500" value={a.dueDate} onChange={(e) => {
-                          const newAss = [...localModule.assessments];
-                          newAss[idx].dueDate = e.target.value;
+                          const newAss = localModule.assessments.map((ass: any, i: number) => 
+                            i === idx ? { ...ass, dueDate: e.target.value } : ass
+                          );
                           updateLocal({ assessments: newAss });
                         }} />
                         <input type="time" className="w-full bg-slate-50 border-none rounded-xl text-sm py-2.5 px-4 focus:ring-1 focus:ring-indigo-500" value={a.dueTime || ''} onChange={(e) => {
-                          const newAss = [...localModule.assessments];
-                          newAss[idx].dueTime = e.target.value;
+                          const newAss = localModule.assessments.map((ass: any, i: number) => 
+                            i === idx ? { ...ass, dueTime: e.target.value } : ass
+                          );
                           updateLocal({ assessments: newAss });
                         }} />
                       </div>
@@ -8969,8 +9962,9 @@ function ModuleCard({ module, profile, modules, communities, schedule, onUpdate,
                     <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest mb-1 block">Weight (%)</label>
                     {isEditing ? (
                       <input type="number" className="w-full bg-slate-50 border-none rounded-xl text-sm py-2.5 px-4 focus:ring-1 focus:ring-indigo-500" value={a.weight} onChange={(e) => {
-                        const newAss = [...localModule.assessments];
-                        newAss[idx].weight = parseInt(e.target.value);
+                        const newAss = localModule.assessments.map((ass: any, i: number) => 
+                          i === idx ? { ...ass, weight: parseInt(e.target.value) } : ass
+                        );
                         updateLocal({ assessments: newAss });
                       }} />
                     ) : (
@@ -8984,8 +9978,9 @@ function ModuleCard({ module, profile, modules, communities, schedule, onUpdate,
                         className="w-full bg-slate-50 border-none rounded-xl text-sm py-2.5 px-4 focus:ring-1 focus:ring-indigo-500"
                         value={a.status || 'Incomplete'}
                         onChange={(e) => {
-                          const newAss = [...localModule.assessments];
-                          newAss[idx].status = e.target.value as any;
+                          const newAss = localModule.assessments.map((ass: any, i: number) => 
+                            i === idx ? { ...ass, status: e.target.value as any } : ass
+                          );
                           updateLocal({ assessments: newAss });
                         }}
                       >
@@ -9010,8 +10005,9 @@ function ModuleCard({ module, profile, modules, communities, schedule, onUpdate,
                     <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest mb-1 block">Mark (%)</label>
                     {isEditing ? (
                       <input type="number" className="w-full bg-slate-50 border-none rounded-xl text-sm py-2.5 px-4 focus:ring-1 focus:ring-indigo-500" value={a.markReceived || ''} onChange={(e) => {
-                        const newAss = [...localModule.assessments];
-                        newAss[idx].markReceived = parseInt(e.target.value);
+                        const newAss = localModule.assessments.map((ass: any, i: number) => 
+                          i === idx ? { ...ass, markReceived: parseInt(e.target.value) } : ass
+                        );
                         updateLocal({ assessments: newAss });
                       }} placeholder="e.g. 85" />
                     ) : (
@@ -9052,8 +10048,15 @@ function ModuleCard({ module, profile, modules, communities, schedule, onUpdate,
                           if (!isEditing) return;
                           const val = prompt("Edit topic:", unit);
                           if (val !== null && val.trim() !== "") {
-                            const newAss = [...localModule.assessments];
-                            newAss[idx].studyUnits[uIdx] = val.trim();
+                            const newAss = localModule.assessments.map((ass: any, i: number) => {
+                              if (i === idx) {
+                                const newStudyUnits = (ass.studyUnits || []).map((u: string, j: number) => 
+                                  j === uIdx ? val.trim() : u
+                                );
+                                return { ...ass, studyUnits: newStudyUnits };
+                              }
+                              return ass;
+                            });
                             updateLocal({ assessments: newAss });
                           }
                         }}
@@ -9063,8 +10066,15 @@ function ModuleCard({ module, profile, modules, communities, schedule, onUpdate,
                       {isEditing && (
                         <button 
                           onClick={() => {
-                            const newAss = [...localModule.assessments];
-                            newAss[idx].studyUnits = newAss[idx].studyUnits.filter((_: any, i: number) => i !== uIdx);
+                            const newAss = localModule.assessments.map((ass: any, i: number) => {
+                              if (i === idx) {
+                                return {
+                                  ...ass,
+                                  studyUnits: (ass.studyUnits || []).filter((_: any, j: number) => j !== uIdx)
+                                };
+                              }
+                              return ass;
+                            });
                             updateLocal({ assessments: newAss });
                           }}
                           className="hover:text-red-500"
@@ -9080,8 +10090,15 @@ function ModuleCard({ module, profile, modules, communities, schedule, onUpdate,
                         onClick={() => {
                           const unit = prompt("Enter study unit / topic name:");
                           if (unit && unit.trim()) {
-                            const newAss = [...localModule.assessments];
-                            newAss[idx].studyUnits = [...(newAss[idx].studyUnits || []), unit.trim()];
+                            const newAss = localModule.assessments.map((ass: any, i: number) => {
+                              if (i === idx) {
+                                return {
+                                  ...ass,
+                                  studyUnits: [...(ass.studyUnits || []), unit.trim()]
+                                };
+                              }
+                              return ass;
+                            });
                             updateLocal({ assessments: newAss });
                           }
                         }}
@@ -9105,8 +10122,15 @@ function ModuleCard({ module, profile, modules, communities, schedule, onUpdate,
                                   onClick={() => {
                                     const unitName = u.name || `Unit ${u.unitNumber}`;
                                     if (!a.studyUnits?.includes(unitName)) {
-                                      const newAss = [...localModule.assessments];
-                                      newAss[idx].studyUnits = [...(newAss[idx].studyUnits || []), unitName];
+                                      const newAss = localModule.assessments.map((ass: any, i: number) => {
+                                        if (i === idx) {
+                                          return {
+                                            ...ass,
+                                            studyUnits: [...(ass.studyUnits || []), unitName]
+                                          };
+                                        }
+                                        return ass;
+                                      });
                                       updateLocal({ assessments: newAss });
                                     }
                                   }}
@@ -9356,21 +10380,24 @@ function ModuleCard({ module, profile, modules, communities, schedule, onUpdate,
                     <div key={unit.id} className="flex items-center gap-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-100 group/unit">
                       <button 
                         onClick={() => {
-                          const newUnits = [...(isEditing ? localModule.units : module.units)];
-                          newUnits[idx].completed = !newUnits[idx].completed;
+                          const currentUnits = isEditing ? localModule.units : module.units;
+                          const newUnits = (currentUnits || []).map((u: any, i: number) => 
+                            i === idx ? { ...u, completed: !u.completed } : u
+                          );
                           if (isEditing) {
                             updateLocal({ units: newUnits });
                           } else {
                             onUpdate({ units: newUnits });
                           }
                         }}
-                        className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
+                        className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center transition-all shrink-0 shadow-sm ${
                           unit.completed 
-                            ? 'bg-emerald-500 border-emerald-500 text-white' 
-                            : 'border-slate-200 hover:border-indigo-400 bg-white'
+                            ? 'bg-emerald-500 border-emerald-500 text-white shadow-emerald-100' 
+                            : 'border-slate-200 hover:border-indigo-400 bg-white hover:bg-indigo-50'
                         }`}
+                        title={unit.completed ? "Mark as incomplete" : "Mark as complete"}
                       >
-                        {unit.completed && <Check size={14} strokeWidth={3} />}
+                        {unit.completed ? <CheckCircle2 size={16} strokeWidth={2.5} /> : <Square size={16} className="text-slate-300" />}
                       </button>
                       <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
                         <div className="md:col-span-2">
@@ -10089,8 +11116,9 @@ function MarksView({ modules, onUpdate }: any) {
                       className="w-20 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-center font-bold focus:ring-1 focus:ring-indigo-500"
                       value={a.markReceived || ''}
                       onChange={(e) => {
-                        const newAss = [...m.assessments];
-                        newAss[idx].markReceived = parseInt(e.target.value);
+                        const newAss = m.assessments.map((ass: any, i: number) => 
+                          i === idx ? { ...ass, markReceived: parseInt(e.target.value) } : ass
+                        );
                         onUpdate(m.id, { assessments: newAss });
                       }}
                       placeholder="0"
@@ -10326,6 +11354,56 @@ function SettingsView({ profile, onUpdate }: any) {
     downloadAnchorNode.remove();
   };
 
+  const handleDeleteAccount = async () => {
+    if (!auth.currentUser) return;
+    
+    const confirmed = window.confirm(
+      "CRITICAL ACTION: Are you absolutely sure you want to delete your account? " +
+      "This will permanently erase your profile, modules, schedule, and all study data. " +
+      "This action CANNOT be undone."
+    );
+    
+    if (!confirmed) return;
+    
+    const doubleConfirmed = window.confirm(
+      "FINAL WARNING: Please confirm one last time. All your progress will be lost forever."
+    );
+    
+    if (!doubleConfirmed) return;
+
+    setIsSaving(true);
+    try {
+      const uid = auth.currentUser.uid;
+      
+      // 1. Delete subcollections (modules, schedule, studyLogs)
+      const subcollections = ['modules', 'schedule', 'studyLogs'];
+      for (const sub of subcollections) {
+        const q = query(collection(db, `users/${uid}/${sub}`));
+        const snapshot = await getDocs(q);
+        const batch = writeBatch(db);
+        snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+        await batch.commit();
+      }
+      
+      // 2. Delete user document
+      await deleteDoc(doc(db, 'users', uid));
+      
+      // 3. Delete auth account
+      await deleteUser(auth.currentUser);
+      
+      // The app will automatically redirect to auth screen due to onAuthStateChanged
+    } catch (err: any) {
+      console.error("Error deleting account:", err);
+      if (err.code === 'auth/requires-recent-login') {
+        setError("For security reasons, you must have logged in recently to delete your account. Please log out and log back in, then try again.");
+      } else {
+        setError("Failed to delete account: " + err.message);
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -10533,12 +11611,14 @@ function SettingsView({ profile, onUpdate }: any) {
                                 className="flex-1 bg-slate-50 border-none rounded-xl px-4 py-2.5 text-xs focus:ring-2 focus:ring-indigo-500 transition-all"
                                 value={link?.url || ''}
                                 onChange={(e) => {
-                                  const newLinks = [...(localProfile.socialLinks || [])];
-                                  const idx = newLinks.findIndex(l => l.platform === platform);
-                                  if (idx > -1) {
-                                    newLinks[idx] = { ...newLinks[idx], url: e.target.value };
+                                  let newLinks;
+                                  const existingIdx = (localProfile.socialLinks || []).findIndex(l => l.platform === platform);
+                                  if (existingIdx > -1) {
+                                    newLinks = localProfile.socialLinks.map((l, i) => 
+                                      i === existingIdx ? { ...l, url: e.target.value } : l
+                                    );
                                   } else {
-                                    newLinks.push({ platform, url: e.target.value });
+                                    newLinks = [...(localProfile.socialLinks || []), { platform, url: e.target.value }];
                                   }
                                   setLocalProfile({ ...localProfile, socialLinks: newLinks });
                                 }}
@@ -10901,6 +11981,20 @@ function SettingsView({ profile, onUpdate }: any) {
                     >
                       <RotateCcw size={14} />
                       Reset Progress
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-4 border-t border-rose-100">
+                    <div>
+                      <h4 className="text-sm font-bold text-rose-700">Delete Account</h4>
+                      <p className="text-xs text-rose-400">Permanently delete your account and all associated data. This action is irreversible.</p>
+                    </div>
+                    <button 
+                      onClick={handleDeleteAccount}
+                      className="flex items-center gap-2 px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 transition-all shadow-sm"
+                    >
+                      <Trash2 size={14} />
+                      Delete Permanently
                     </button>
                   </div>
                 </div>

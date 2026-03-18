@@ -67,6 +67,11 @@
         "passMark": { "type": "number", "description": "Pass mark percentage for this module" },
         "examDate": { "type": "string" },
         "portfolioDate": { "type": "string" },
+        "masteryScore": { "type": "number", "description": "Overall module mastery score (0-100)" },
+        "units": {
+          "type": "array",
+          "items": { "$ref": "StudyUnit" }
+        },
         "chatHistory": {
           "type": "array",
           "items": {
@@ -96,6 +101,21 @@
         "studyUnits": { "type": "array", "items": { "type": "string" } }
       },
       "required": ["id", "title", "dueDate", "weight"]
+    },
+    "StudyUnit": {
+      "title": "Study Unit",
+      "description": "A specific unit or chapter within a module",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "unitNumber": { "type": "string" },
+        "name": { "type": "string" },
+        "completed": { "type": "boolean", "description": "Whether the unit has been completed" },
+        "notes": { "type": "string" },
+        "summary": { "type": "string" },
+        "learningOutcomes": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "unitNumber", "name", "completed"]
     },
     "Community": {
       "title": "Community",
@@ -128,6 +148,22 @@
         "timestamp": { "type": "string" }
       },
       "required": ["id", "senderId", "senderName", "text", "timestamp"]
+    },
+    "StudyLog": {
+      "title": "Study Log",
+      "description": "A manual record of a study session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "moduleId": { "type": "string" },
+        "unitId": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "duration": { "type": "number" },
+        "notes": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "moduleId", "startTime", "endTime", "duration", "timestamp"]
     }
   },
   "firestore": {
@@ -142,6 +178,14 @@
     "/users/{userId}/modules/{moduleId}/assessments/{assessmentId}": {
       "schema": "Assessment",
       "description": "Assessments for a specific module"
+    },
+    "/users/{userId}/studyLogs/{logId}": {
+      "schema": "StudyLog",
+      "description": "Manual study logs"
+    },
+    "/users/{userId}/schedule/{itemId}": {
+      "schema": "object",
+      "description": "User's study schedule"
     },
     "/communities/{communityId}": {
       "schema": "Community",

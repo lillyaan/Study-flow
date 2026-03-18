@@ -26,7 +26,7 @@ export interface StudyUnit {
   id: string;
   unitNumber: string;
   name: string;
-  completed?: boolean;
+  completed: boolean;
   notes?: string;
   summary?: string;
   learningOutcomes?: string[];
@@ -94,6 +94,12 @@ export interface YoutubeVideo {
   timestamp: any;
 }
 
+export interface VideoSlide {
+  title: string;
+  content: string;
+  narration: string;
+}
+
 export interface Module {
   id: string;
   title: string;
@@ -124,6 +130,8 @@ export interface Module {
   learningOutcomes?: string[]; // AI identified learning outcomes
   resources?: UnitResource[];
   isLanguage?: boolean; // Explicitly indicate if this is a language module
+  videoSlides?: VideoSlide[];
+  videoAudioUrl?: string;
 }
 
 export interface Badge {
@@ -222,6 +230,40 @@ export interface ScheduleItem {
   end: Date;
   moduleId?: string;
   completed?: boolean;
+}
+
+export interface StudyLog {
+  id: string;
+  moduleId: string;
+  unitId?: string;
+  startTime: any;
+  endTime: any;
+  duration: number; // in minutes
+  notes?: string;
+  timestamp: any;
+}
+
+export interface University {
+  id: string;
+  name: string;
+  location: string;
+  website: string;
+  prospectusUrl: string;
+  logoUrl?: string;
+  description?: string;
+  apsRequirements?: {
+    course: string;
+    minAps: number;
+    subjects?: string[];
+  }[];
+}
+
+export interface APSSubject {
+  name: string;
+  mark: number;
+  isLanguage?: boolean;
+  isMaths?: boolean;
+  isLO?: boolean;
 }
 
 export interface AppState {

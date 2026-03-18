@@ -12,7 +12,7 @@ service cloud.firestore {
     //
     // Collection: users/{userId}/modules
     // Document ID: {moduleId}
-    // Fields: id, title, moduleType, examDate, portfolioDate, chatHistory
+    // Fields: id, title, moduleType, examDate, portfolioDate, masteryScore, units, chatHistory
     //
     // Collection: users/{userId}/modules/{moduleId}/assessments
     // Document ID: {assessmentId}
@@ -43,9 +43,12 @@ service cloud.firestore {
           (request.auth.token.email == "lillyaan14@gmail.com" && request.auth.token.email_verified == true));
     }
 
-    function isSharedWith(userId) {
-      let userDoc = get(/databases/$(database)/documents/users/$(userId));
-      return isAuthenticated() && request.auth.uid in userDoc.data.sharedWith;
+    function isUserSharedWith() {
+      return isAuthenticated() && request.auth.uid in resource.data.sharedWith;
+    }
+
+    function isParentSharedWith(userId) {
+      return isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/users/$(userId)).data.sharedWith;
     }
 
     function isValidUser(data) {
@@ -58,18 +61,23 @@ service cloud.firestore {
 
     // Rules
     match /users/{userId} {
-      allow read: if isOwner(userId) || isSharedWith(userId) || isAdmin();
+      allow read: if isOwner(userId) || isUserSharedWith() || isAdmin();
       allow create: if isOwner(userId) && isValidUser(request.resource.data);
       allow update: if isOwner(userId) && isValidUser(request.resource.data);
-      allow delete: if isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
 
       match /modules/{moduleId} {
-        allow read: if isOwner(userId) || isSharedWith(userId) || isAdmin();
+        allow read: if isOwner(userId) || isParentSharedWith(userId) || isAdmin();
         allow write: if isOwner(userId) || isAdmin();
       }
 
       match /schedule/{itemId} {
-        allow read: if isOwner(userId) || isSharedWith(userId) || isAdmin();
+        allow read: if isOwner(userId) || isParentSharedWith(userId) || isAdmin();
+        allow write: if isOwner(userId) || isAdmin();
+      }
+
+      match /studyLogs/{logId} {
+        allow read: if isOwner(userId) || isParentSharedWith(userId) || isAdmin();
         allow write: if isOwner(userId) || isAdmin();
       }
     }
