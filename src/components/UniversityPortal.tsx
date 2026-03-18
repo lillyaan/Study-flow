@@ -19,79 +19,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { University, APSSubject, UserProfile, Module } from '../types';
-
-const SAMPLE_UNIVERSITIES: University[] = [
-  {
-    id: 'uj',
-    name: 'University of Johannesburg (UJ)',
-    location: 'Johannesburg, Gauteng',
-    website: 'https://www.uj.ac.za',
-    prospectusUrl: 'https://www.uj.ac.za/wp-content/uploads/2021/11/UJ-Prospectus-2025.pdf',
-    logoUrl: 'https://picsum.photos/seed/uj/100/100',
-    description: 'A vibrant university that offers a wide range of undergraduate and postgraduate programs.',
-    apsRequirements: [
-      { course: 'BSc Computer Science', minAps: 30, subjects: ['Mathematics', 'Physical Sciences'] },
-      { course: 'BCom Accounting', minAps: 28, subjects: ['Mathematics'] },
-      { course: 'BA Psychology', minAps: 26 }
-    ]
-  },
-  {
-    id: 'wits',
-    name: 'University of the Witwatersrand (Wits)',
-    location: 'Johannesburg, Gauteng',
-    website: 'https://www.wits.ac.za',
-    prospectusUrl: 'https://www.wits.ac.za/media/wits-university/study/undergraduate/documents/Wits-Undergraduate-Prospectus-2025.pdf',
-    logoUrl: 'https://picsum.photos/seed/wits/100/100',
-    description: 'One of the leading research-intensive universities in Africa.',
-    apsRequirements: [
-      { course: 'BSc Engineering', minAps: 42, subjects: ['Mathematics', 'Physical Sciences'] },
-      { course: 'MBBCh (Medicine)', minAps: 45, subjects: ['Mathematics', 'Physical Sciences', 'Life Sciences'] },
-      { course: 'BCom Law', minAps: 38 }
-    ]
-  },
-  {
-    id: 'up',
-    name: 'University of Pretoria (UP)',
-    location: 'Pretoria, Gauteng',
-    website: 'https://www.up.ac.za',
-    prospectusUrl: 'https://www.up.ac.za/media/shared/6/ZP_Files/up-undergraduate-prospectus-2025.zp231234.pdf',
-    logoUrl: 'https://picsum.photos/seed/up/100/100',
-    description: 'A multi-campus public research university in Pretoria.',
-    apsRequirements: [
-      { course: 'BSc Information Technology', minAps: 30, subjects: ['Mathematics'] },
-      { course: 'BEng Civil Engineering', minAps: 35, subjects: ['Mathematics', 'Physical Sciences'] },
-      { course: 'BEd Foundation Phase', minAps: 28 }
-    ]
-  },
-  {
-    id: 'uct',
-    name: 'University of Cape Town (UCT)',
-    location: 'Cape Town, Western Cape',
-    website: 'https://www.uct.ac.za',
-    prospectusUrl: 'https://www.uct.ac.za/sites/default/files/media/documents/uct_ac_za/study/undergraduate/prospectus/UCT_Undergraduate_Prospectus_2025.pdf',
-    logoUrl: 'https://picsum.photos/seed/uct/100/100',
-    description: 'The oldest university in South Africa and the highest-ranked in Africa.',
-    apsRequirements: [
-      { course: 'BSc Computer Science', minAps: 450, subjects: ['Mathematics', 'Physical Sciences'] }, // UCT uses a different scoring system but for simplicity we'll use APS
-      { course: 'BSocSc Philosophy', minAps: 380 },
-      { course: 'BCom Economics', minAps: 420 }
-    ]
-  },
-  {
-    id: 'sun',
-    name: 'Stellenbosch University (SU)',
-    location: 'Stellenbosch, Western Cape',
-    website: 'https://www.sun.ac.za',
-    prospectusUrl: 'https://www.sun.ac.za/english/Documents/Prospectus/2025/SU_Undergraduate_Prospectus_2025.pdf',
-    logoUrl: 'https://picsum.photos/seed/sun/100/100',
-    description: 'A leading research-intensive university in South Africa.',
-    apsRequirements: [
-      { course: 'BSc Data Science', minAps: 34, subjects: ['Mathematics'] },
-      { course: 'BAcc Accounting', minAps: 32, subjects: ['Mathematics'] },
-      { course: 'BA International Studies', minAps: 30 }
-    ]
-  }
-];
+import { SAMPLE_UNIVERSITIES } from '../data/universities';
 
 const APS_SCALE = [
   { range: [80, 100], points: 7 },
@@ -155,19 +83,49 @@ const UniversityPortal: React.FC<{ profile?: UserProfile | null, modules?: Modul
     }
   };
 
-  const totalAPS = useMemo(() => {
+  const [showGrade12, setShowGrade12] = useState(() => {
+    const hasGrade12Marks = profile?.apsSubjects?.some(s => s.grade12Mark && s.grade12Mark > 0);
+    if (hasGrade12Marks) return true;
+    if (profile?.yearGrade?.includes('11') || profile?.yearGrade?.includes('12')) return false;
+    return true;
+  });
+
+  const apsGrade11 = useMemo(() => {
     return subjects.reduce((total, sub) => {
-      // Life Orientation is usually excluded or halved in many universities
-      // For this calculator, we'll exclude it from the main APS but show it
       if (sub.isLO) return total;
-      return total + getAPSPoints(sub.mark);
+      return total + getAPSPoints(sub.grade11Mark || 0);
     }, 0);
   }, [subjects]);
 
+  const apsGrade12 = useMemo(() => {
+    return subjects.reduce((total, sub) => {
+      if (sub.isLO) return total;
+      return total + getAPSPoints(sub.grade12Mark || 0);
+    }, 0);
+  }, [subjects]);
+
+  const uctScoreGrade11 = useMemo(() => {
+    // UCT score is sum of percentages of top 6 subjects (excluding LO)
+    const validSubjects = subjects.filter(s => !s.isLO).map(s => s.grade11Mark || 0);
+    validSubjects.sort((a, b) => b - a);
+    return validSubjects.slice(0, 6).reduce((total, mark) => total + mark, 0);
+  }, [subjects]);
+
+  const uctScoreGrade12 = useMemo(() => {
+    const validSubjects = subjects.filter(s => !s.isLO).map(s => s.grade12Mark || 0);
+    validSubjects.sort((a, b) => b - a);
+    return validSubjects.slice(0, 6).reduce((total, mark) => total + mark, 0);
+  }, [subjects]);
+
+  const bestAPS = showGrade12 ? Math.max(apsGrade11, apsGrade12) : apsGrade11;
+  const bestGrade = showGrade12 && apsGrade12 > apsGrade11 ? 'Grade 12' : 'Grade 11';
+  const bestUCTScore = showGrade12 && apsGrade12 > apsGrade11 ? uctScoreGrade12 : uctScoreGrade11;
+
   const loPoints = useMemo(() => {
     const lo = subjects.find(s => s.isLO);
-    return lo ? getAPSPoints(lo.mark) : 0;
-  }, [subjects]);
+    if (!lo) return 0;
+    return getAPSPoints(bestGrade === 'Grade 12' ? (lo.grade12Mark || 0) : (lo.grade11Mark || 0));
+  }, [subjects, bestGrade]);
 
   const filteredUniversities = useMemo(() => {
     return SAMPLE_UNIVERSITIES.filter(u => 
@@ -177,24 +135,34 @@ const UniversityPortal: React.FC<{ profile?: UserProfile | null, modules?: Modul
   }, [searchQuery]);
 
   const qualifiedCourses = useMemo(() => {
-    const courses: { uniName: string, course: string, minAps: number }[] = [];
+    const courses: { uniName: string, course: string, minAps: number, scoringSystem: string }[] = [];
     SAMPLE_UNIVERSITIES.forEach(uni => {
       uni.apsRequirements?.forEach(req => {
-        // Exclude universities with different scoring systems (like UCT with 400+ points)
-        if (req.minAps <= 50 && totalAPS >= req.minAps) {
-          courses.push({ uniName: uni.name, course: req.course, minAps: req.minAps });
+        if (uni.scoringSystem === 'uct') {
+          if (bestUCTScore >= req.minAps) {
+            courses.push({ uniName: uni.name, course: req.course, minAps: req.minAps, scoringSystem: 'uct' });
+          }
+        } else {
+          if (bestAPS >= req.minAps) {
+            courses.push({ uniName: uni.name, course: req.course, minAps: req.minAps, scoringSystem: 'standard' });
+          }
         }
       });
     });
-    return courses.sort((a, b) => b.minAps - a.minAps);
-  }, [totalAPS]);
+    return courses.sort((a, b) => {
+      if (a.scoringSystem === 'uct' && b.scoringSystem !== 'uct') return 1;
+      if (a.scoringSystem !== 'uct' && b.scoringSystem === 'uct') return -1;
+      return b.minAps - a.minAps;
+    }).slice(0, 200);
+  }, [bestAPS, bestUCTScore]);
 
   const handleMarkChange = (index: number, mark: number, type: 'mark' | 'grade11Mark' | 'grade12Mark' = 'mark') => {
     const newSubjects = [...subjects];
     const safeMark = isNaN(mark) ? 0 : Math.min(100, Math.max(0, mark));
     newSubjects[index][type] = safeMark;
-    if (type === 'grade12Mark') {
-      newSubjects[index].mark = safeMark;
+    if (type === 'grade12Mark' || type === 'grade11Mark') {
+      // Keep legacy mark in sync with best grade or just grade11 if grade12 not shown
+      newSubjects[index].mark = type === 'grade12Mark' ? safeMark : (newSubjects[index].grade12Mark || safeMark);
     }
     saveSubjects(newSubjects);
   };
@@ -299,6 +267,13 @@ const UniversityPortal: React.FC<{ profile?: UserProfile | null, modules?: Modul
                       </button>
                     )}
                     <button 
+                      onClick={() => setShowGrade12(!showGrade12)}
+                      className={`px-4 py-2 rounded-xl transition-all text-sm font-bold flex items-center gap-2 ${showGrade12 ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                      title="Toggle Grade 12 Marks"
+                    >
+                      {showGrade12 ? 'Hide Grade 12' : 'Add Grade 12 Marks'}
+                    </button>
+                    <button 
                       onClick={addSubject}
                       className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-all"
                       title="Add Subject"
@@ -340,23 +315,27 @@ const UniversityPortal: React.FC<{ profile?: UserProfile | null, modules?: Modul
                             />
                           </div>
                         </div>
-                        <div className="flex flex-col items-center">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">Gr 12</span>
-                          <div className="relative w-20">
-                            <input 
-                              type="number" 
-                              value={sub.grade12Mark === undefined ? '' : sub.grade12Mark}
-                              onChange={(e) => handleMarkChange(idx, e.target.value === '' ? 0 : parseInt(e.target.value), 'grade12Mark')}
-                              className="w-full bg-white border-slate-200 rounded-xl px-2 py-2 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 text-center"
-                              placeholder="%"
-                            />
+                        {showGrade12 && (
+                          <div className="flex flex-col items-center">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">Gr 12</span>
+                            <div className="relative w-20">
+                              <input 
+                                type="number" 
+                                value={sub.grade12Mark === undefined ? '' : sub.grade12Mark}
+                                onChange={(e) => handleMarkChange(idx, e.target.value === '' ? 0 : parseInt(e.target.value), 'grade12Mark')}
+                                className="w-full bg-white border-slate-200 rounded-xl px-2 py-2 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 text-center"
+                                placeholder="%"
+                              />
+                            </div>
                           </div>
-                        </div>
+                        )}
                         
                         <div className="flex flex-col items-center">
                           <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">APS</span>
                           <div className="w-12 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
-                            <span className="text-sm font-bold text-indigo-600">{getAPSPoints(sub.mark)}</span>
+                            <span className="text-sm font-bold text-indigo-600">
+                              {getAPSPoints(showGrade12 ? Math.max(sub.grade11Mark || 0, sub.grade12Mark || 0) : (sub.grade11Mark || 0))}
+                            </span>
                           </div>
                         </div>
 
@@ -380,10 +359,14 @@ const UniversityPortal: React.FC<{ profile?: UserProfile | null, modules?: Modul
                   <div className="space-y-2">
                     <h4 className="text-indigo-100 font-bold uppercase tracking-widest text-xs">Your Current Score</h4>
                     <div className="flex items-baseline gap-2">
-                      <span className="text-6xl font-black">{totalAPS}</span>
+                      <span className="text-6xl font-black">{bestAPS}</span>
                       <span className="text-xl font-bold text-indigo-200">APS Points</span>
                     </div>
-                    <p className="text-indigo-100/80 text-sm">Excluding Life Orientation (+{loPoints} LO Points)</p>
+                    <div className="flex items-baseline gap-2 mt-2">
+                      <span className="text-2xl font-bold text-indigo-100">{bestUCTScore}</span>
+                      <span className="text-sm font-medium text-indigo-200">UCT Points</span>
+                    </div>
+                    <p className="text-indigo-100/80 text-sm mt-2">Based on {bestGrade} (Excluding LO: +{loPoints} Pts)</p>
                   </div>
                   
                   <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/20">
@@ -404,7 +387,7 @@ const UniversityPortal: React.FC<{ profile?: UserProfile | null, modules?: Modul
                 </div>
               </div>
 
-              {totalAPS > 0 && (
+              {bestAPS > 0 && (
                 <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
                   <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
                     <CheckCircle2 className="text-emerald-500" />
@@ -420,7 +403,7 @@ const UniversityPortal: React.FC<{ profile?: UserProfile | null, modules?: Modul
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">
-                              Min APS: {course.minAps}
+                              {course.scoringSystem === 'uct' ? `Min UCT Score: ${course.minAps}` : `Min APS: ${course.minAps}`}
                             </span>
                           </div>
                         </div>
@@ -560,7 +543,9 @@ const UniversityPortal: React.FC<{ profile?: UserProfile | null, modules?: Modul
                         {uni.apsRequirements?.slice(0, 2).map((req, i) => (
                           <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
                             <span className="text-[10px] font-bold text-slate-700">{req.course}</span>
-                            <span className="text-[10px] font-bold text-indigo-600">APS {req.minAps}+</span>
+                            <span className="text-[10px] font-bold text-indigo-600">
+                              {uni.scoringSystem === 'uct' ? `UCT ${req.minAps}+` : `APS ${req.minAps}+`}
+                            </span>
                           </div>
                         ))}
                       </div>

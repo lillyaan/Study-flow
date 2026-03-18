@@ -253,6 +253,7 @@ export interface University {
   prospectusUrl: string;
   logoUrl?: string;
   description?: string;
+  scoringSystem?: 'standard' | 'uct';
   apsRequirements?: {
     course: string;
     minAps: number;
