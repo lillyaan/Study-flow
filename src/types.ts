@@ -186,6 +186,8 @@ export interface UserProfile {
     sessionDuration: number;    // minutes
     breakDuration: number;      // minutes
   };
+  curriculum?: string;
+  apsSubjects?: APSSubject[];
   availability?: {
     day: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
     startTime: string;
@@ -261,6 +263,8 @@ export interface University {
 export interface APSSubject {
   name: string;
   mark: number;
+  grade11Mark?: number;
+  grade12Mark?: number;
   isLanguage?: boolean;
   isMaths?: boolean;
   isLO?: boolean;

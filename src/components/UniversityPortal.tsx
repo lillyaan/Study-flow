@@ -15,9 +15,10 @@ import {
   TrendingUp,
   Globe,
   MapPin,
-  BookOpen
+  BookOpen,
+  RefreshCw
 } from 'lucide-react';
-import { University, APSSubject } from '../types';
+import { University, APSSubject, UserProfile, Module } from '../types';
 
 const SAMPLE_UNIVERSITIES: University[] = [
   {
@@ -107,20 +108,52 @@ const getAPSPoints = (mark: number) => {
   return scale ? scale.points : 0;
 };
 
-const UniversityPortal: React.FC = () => {
+const UniversityPortal: React.FC<{ profile?: UserProfile | null, modules?: Module[], onUpdateProfile?: (p: Partial<UserProfile>) => void }> = ({ profile, modules, onUpdateProfile }) => {
   const [activeTab, setActiveTab] = useState<'aps' | 'prospectus'>('aps');
   const [searchQuery, setSearchQuery] = useState('');
   
   // APS Calculator State
-  const [subjects, setSubjects] = useState<APSSubject[]>([
-    { name: 'English Home Language', mark: 0, isLanguage: true },
-    { name: 'First Additional Language', mark: 0, isLanguage: true },
-    { name: 'Mathematics', mark: 0, isMaths: true },
-    { name: 'Life Orientation', mark: 0, isLO: true },
-    { name: 'Subject 5', mark: 0 },
-    { name: 'Subject 6', mark: 0 },
-    { name: 'Subject 7', mark: 0 },
-  ]);
+  const [subjects, setSubjects] = useState<APSSubject[]>(() => {
+    if (profile?.apsSubjects && profile.apsSubjects.length > 0) {
+      return profile.apsSubjects;
+    }
+    
+    // If high school user and has modules, initialize from modules
+    if (profile?.studentLevel === 'High School' && modules && modules.length > 0) {
+      const initialSubjects: APSSubject[] = modules.map(m => ({
+        name: m.title,
+        mark: m.examMark || 0,
+        grade11Mark: m.examMark || 0,
+        grade12Mark: m.examMark || 0,
+        isLanguage: m.isLanguage,
+        isMaths: m.title.toLowerCase().includes('math'),
+        isLO: m.title.toLowerCase().includes('life orientation')
+      }));
+      
+      // Ensure we have at least 7 subjects
+      while (initialSubjects.length < 7) {
+        initialSubjects.push({ name: `Subject ${initialSubjects.length + 1}`, mark: 0, grade11Mark: 0, grade12Mark: 0 });
+      }
+      return initialSubjects;
+    }
+
+    return [
+      { name: 'English Home Language', mark: 0, grade11Mark: 0, grade12Mark: 0, isLanguage: true },
+      { name: 'First Additional Language', mark: 0, grade11Mark: 0, grade12Mark: 0, isLanguage: true },
+      { name: 'Mathematics', mark: 0, grade11Mark: 0, grade12Mark: 0, isMaths: true },
+      { name: 'Life Orientation', mark: 0, grade11Mark: 0, grade12Mark: 0, isLO: true },
+      { name: 'Subject 5', mark: 0, grade11Mark: 0, grade12Mark: 0 },
+      { name: 'Subject 6', mark: 0, grade11Mark: 0, grade12Mark: 0 },
+      { name: 'Subject 7', mark: 0, grade11Mark: 0, grade12Mark: 0 },
+    ];
+  });
+
+  const saveSubjects = (newSubjects: APSSubject[]) => {
+    setSubjects(newSubjects);
+    if (onUpdateProfile) {
+      onUpdateProfile({ apsSubjects: newSubjects });
+    }
+  };
 
   const totalAPS = useMemo(() => {
     return subjects.reduce((total, sub) => {
@@ -156,28 +189,33 @@ const UniversityPortal: React.FC = () => {
     return courses.sort((a, b) => b.minAps - a.minAps);
   }, [totalAPS]);
 
-  const handleMarkChange = (index: number, mark: number) => {
+  const handleMarkChange = (index: number, mark: number, type: 'mark' | 'grade11Mark' | 'grade12Mark' = 'mark') => {
     const newSubjects = [...subjects];
-    newSubjects[index].mark = Math.min(100, Math.max(0, mark));
-    setSubjects(newSubjects);
+    const safeMark = isNaN(mark) ? 0 : Math.min(100, Math.max(0, mark));
+    newSubjects[index][type] = safeMark;
+    if (type === 'grade12Mark') {
+      newSubjects[index].mark = safeMark;
+    }
+    saveSubjects(newSubjects);
   };
 
   const handleSubjectNameChange = (index: number, name: string) => {
     const newSubjects = [...subjects];
     newSubjects[index].name = name;
-    setSubjects(newSubjects);
+    saveSubjects(newSubjects);
   };
 
   const addSubject = () => {
     if (subjects.length < 10) {
-      setSubjects([...subjects, { name: `Subject ${subjects.length + 1}`, mark: 0 }]);
+      saveSubjects([...subjects, { name: `Subject ${subjects.length + 1}`, mark: 0, grade11Mark: 0, grade12Mark: 0 }]);
     }
   };
 
   const removeSubject = (index: number) => {
-    if (subjects.length > 7) {
+    const subject = subjects[index];
+    if (!subject.isLanguage && !subject.isMaths && !subject.isLO) {
       const newSubjects = subjects.filter((_, i) => i !== index);
-      setSubjects(newSubjects);
+      saveSubjects(newSubjects);
     }
   };
 
@@ -235,13 +273,39 @@ const UniversityPortal: React.FC = () => {
                     <Calculator className="text-indigo-600" />
                     Calculate Your APS
                   </h3>
-                  <button 
-                    onClick={addSubject}
-                    className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-all"
-                    title="Add Subject"
-                  >
-                    <Plus size={20} />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {profile?.studentLevel === 'High School' && modules && modules.length > 0 && (
+                      <button 
+                        onClick={() => {
+                          const initialSubjects: APSSubject[] = modules.map(m => ({
+                            name: m.title,
+                            mark: m.examMark || 0,
+                            grade11Mark: m.examMark || 0,
+                            grade12Mark: m.examMark || 0,
+                            isLanguage: m.isLanguage,
+                            isMaths: m.title.toLowerCase().includes('math'),
+                            isLO: m.title.toLowerCase().includes('life orientation')
+                          }));
+                          while (initialSubjects.length < 7) {
+                            initialSubjects.push({ name: `Subject ${initialSubjects.length + 1}`, mark: 0, grade11Mark: 0, grade12Mark: 0 });
+                          }
+                          saveSubjects(initialSubjects);
+                        }}
+                        className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-all text-sm font-bold flex items-center gap-2"
+                        title="Sync from Subjects"
+                      >
+                        <RefreshCw size={16} />
+                        Sync from Subjects
+                      </button>
+                    )}
+                    <button 
+                      onClick={addSubject}
+                      className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-all"
+                      title="Add Subject"
+                    >
+                      <Plus size={20} />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-4">
@@ -263,27 +327,43 @@ const UniversityPortal: React.FC = () => {
                         </div>
                       </div>
                       
-                      <div className="flex items-center gap-4">
-                        <div className="relative w-24">
-                          <input 
-                            type="number" 
-                            value={sub.mark || ''}
-                            onChange={(e) => handleMarkChange(idx, parseInt(e.target.value) || 0)}
-                            className="w-full bg-white border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500"
-                            placeholder="Mark %"
-                          />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">%</span>
+                      <div className="flex items-center gap-2 sm:gap-4">
+                        <div className="flex flex-col items-center">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">Gr 11</span>
+                          <div className="relative w-20">
+                            <input 
+                              type="number" 
+                              value={sub.grade11Mark === undefined ? '' : sub.grade11Mark}
+                              onChange={(e) => handleMarkChange(idx, e.target.value === '' ? 0 : parseInt(e.target.value), 'grade11Mark')}
+                              className="w-full bg-white border-slate-200 rounded-xl px-2 py-2 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 text-center"
+                              placeholder="%"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">Gr 12</span>
+                          <div className="relative w-20">
+                            <input 
+                              type="number" 
+                              value={sub.grade12Mark === undefined ? '' : sub.grade12Mark}
+                              onChange={(e) => handleMarkChange(idx, e.target.value === '' ? 0 : parseInt(e.target.value), 'grade12Mark')}
+                              className="w-full bg-white border-slate-200 rounded-xl px-2 py-2 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 text-center"
+                              placeholder="%"
+                            />
+                          </div>
                         </div>
                         
-                        <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex flex-col items-center justify-center shadow-sm">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase">Pts</span>
-                          <span className="text-sm font-bold text-indigo-600">{getAPSPoints(sub.mark)}</span>
+                        <div className="flex flex-col items-center">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase mb-1">APS</span>
+                          <div className="w-12 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+                            <span className="text-sm font-bold text-indigo-600">{getAPSPoints(sub.mark)}</span>
+                          </div>
                         </div>
 
                         {!sub.isLanguage && !sub.isMaths && !sub.isLO && (
                           <button 
                             onClick={() => removeSubject(idx)}
-                            className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                            className="p-2 text-slate-300 hover:text-red-500 transition-colors mt-4"
                           >
                             <Trash2 size={18} />
                           </button>

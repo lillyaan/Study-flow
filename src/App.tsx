@@ -973,8 +973,8 @@ export default function App() {
     const appUrl = window.location.origin;
     if (navigator.share) {
       navigator.share({
-        title: 'StudyFlow AI',
-        text: 'Check out StudyFlow AI - the ultimate AI-powered study companion!',
+        title: 'Pfunzo AI',
+        text: 'Check out Pfunzo AI - the ultimate AI-powered study companion!',
         url: appUrl,
       }).catch(err => {
         console.error("Error sharing:", err);
@@ -1238,7 +1238,7 @@ export default function App() {
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
     pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-    pdf.save('StudyFlow_Plan.pdf');
+    pdf.save('Pfunzo_Plan.pdf');
   };
 
   const exportToPNG = async () => {
@@ -1246,7 +1246,7 @@ export default function App() {
     if (!element) return;
     const canvas = await html2canvas(element);
     const link = document.createElement('a');
-    link.download = 'StudyFlow_Plan.png';
+    link.download = 'Pfunzo_Plan.png';
     link.href = canvas.toDataURL();
     link.click();
   };
@@ -1274,7 +1274,7 @@ export default function App() {
     const wsSchedule = XLSX.utils.json_to_sheet(scheduleData);
     XLSX.utils.book_append_sheet(wb, wsSchedule, "Timetable");
 
-    XLSX.writeFile(wb, "StudyFlow_Full_Plan.xlsx");
+    XLSX.writeFile(wb, "Pfunzo_Full_Plan.xlsx");
   };
 
   const exportToWord = async () => {
@@ -1284,7 +1284,7 @@ export default function App() {
         children: [
           new Paragraph({
             children: [
-              new TextRun({ text: "StudyFlow Planner Report", bold: true, size: 36 }),
+              new TextRun({ text: "Pfunzo Planner Report", bold: true, size: 36 }),
             ],
             spacing: { after: 400 }
           }),
@@ -1328,7 +1328,7 @@ export default function App() {
     });
 
     const blob = await Packer.toBlob(doc);
-    saveAs(blob, "StudyFlow_Report.docx");
+    saveAs(blob, "Pfunzo_Report.docx");
   };
 
   const handleExport = async (format: string) => {
@@ -1364,7 +1364,7 @@ export default function App() {
               <BookOpen size={22} />
             </div>
             <div>
-              <h1 className="text-lg font-bold tracking-tight">StudyFlow</h1>
+              <h1 className="text-lg font-bold tracking-tight">Pfunzo</h1>
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Academic Planner</p>
             </div>
           </div>
@@ -1462,7 +1462,7 @@ export default function App() {
                   <UserPlus size={20} className="text-white" />
                 </div>
                 <h4 className="font-bold text-lg mb-2">Invite a Friend</h4>
-                <p className="text-xs text-indigo-100 mb-6 leading-relaxed">Know someone who needs a study boost? Share StudyFlow AI with them!</p>
+                <p className="text-xs text-indigo-100 mb-6 leading-relaxed">Know someone who needs a study boost? Share Pfunzo AI with them!</p>
                 <button 
                   onClick={handleShareApp}
                   className="w-full py-3 bg-white text-indigo-600 rounded-2xl text-xs font-bold hover:bg-indigo-50 transition-all shadow-lg flex items-center justify-center gap-2"
@@ -1618,7 +1618,7 @@ export default function App() {
                   onConfirm={confirmAction}
                 />
               )}
-              {activeTab === 'university_portal' && <UniversityPortal />}
+              {activeTab === 'university_portal' && <UniversityPortal profile={profile} modules={modules} onUpdateProfile={(p) => updateDoc(doc(db, 'users', user.uid), p)} />}
               {activeTab === 'sharing' && <SharingView sharedProfiles={sharedProfiles} onShare={handleShareProfile} />}
               {activeTab === 'settings' && <SettingsView profile={profile} onUpdate={(p) => updateDoc(doc(db, 'users', user.uid), p)} />}
             </AnimatePresence>
@@ -1628,7 +1628,7 @@ export default function App() {
 
       {/* Export Utility Bar (Hidden but used for html2canvas) */}
       <div id="export-area" className="fixed -left-[9999px] top-0 w-[800px] bg-white p-10">
-        <h1 className="text-3xl font-bold mb-4">StudyFlow Planner Report</h1>
+        <h1 className="text-3xl font-bold mb-4">Pfunzo Planner Report</h1>
         <p className="text-slate-500 mb-8">Generated for {profile.firstName} {profile.lastName} on {format(new Date(), 'PPP')}</p>
         
         <div className="space-y-8">
@@ -1746,7 +1746,7 @@ function AuthScreen() {
           <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white mx-auto mb-4 shadow-xl shadow-indigo-100">
             <BookOpen size={32} />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">StudyFlow</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Pfunzo</h1>
           <p className="text-slate-400 mt-2">{isLogin ? 'Welcome back to your flow' : 'Start your academic journey'}</p>
         </div>
 
@@ -4611,7 +4611,7 @@ function VideoGeneratorView({ module, onUpdate }: { module: Module, onUpdate: (u
 
 function AIChatView({ profile, modules, schedule, module }: { profile: UserProfile, modules: any[], schedule: any[], module?: Module }) {
   const [messages, setMessages] = useState<{ role: 'user' | 'model', text: string }[]>([
-    { role: 'model', text: `Hi ${profile.firstName}! I'm your StudyFlow AI assistant. ${module ? `How can I help you with your studies for "${module.title}" today?` : "How can I help you with your studies or planning today?"}` }
+    { role: 'model', text: `Hi ${profile.firstName}! I'm your Pfunzo AI assistant. ${module ? `How can I help you with your studies for "${module.title}" today?` : "How can I help you with your studies or planning today?"}` }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -4689,7 +4689,7 @@ function AIChatView({ profile, modules, schedule, module }: { profile: UserProfi
       const availability = profile.availability?.filter(a => a.enabled).map(a => `- ${a.day}: ${a.startTime} - ${a.endTime}`).join('\n') || 'Not set';
 
       const contents: any[] = [
-        { role: 'user', parts: [{ text: `You are Pfunzo AI (formerly StudyFlow AI), a highly context-aware, helpful, and encouraging academic assistant for a ${profile.studentLevel} student named ${profile.firstName}.
+        { role: 'user', parts: [{ text: `You are Pfunzo AI, a highly context-aware, helpful, and encouraging academic assistant for a ${profile.studentLevel} student named ${profile.firstName}.
           Your goal is to help them with study materials, explain complex topics, and assist with academic planning.
           
           CURRENT TIME: ${format(now, 'EEEE, MMMM d, yyyy, HH:mm')}
@@ -4767,12 +4767,12 @@ function AIChatView({ profile, modules, schedule, module }: { profile: UserProfi
             <Sparkles size={20} />
           </div>
           <div>
-            <h3 className="font-bold text-slate-800">StudyFlow AI Chat</h3>
+            <h3 className="font-bold text-slate-800">Pfunzo AI Chat</h3>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Always here to help</p>
           </div>
         </div>
         <button 
-          onClick={() => setMessages([{ role: 'model', text: `Hi ${profile.firstName}! I'm your StudyFlow AI assistant. ${module ? `How can I help you with your studies for "${module.title}" today?` : "How can I help you with your studies or planning today?"}` }])}
+          onClick={() => setMessages([{ role: 'model', text: `Hi ${profile.firstName}! I'm your Pfunzo AI assistant. ${module ? `How can I help you with your studies for "${module.title}" today?` : "How can I help you with your studies or planning today?"}` }])}
           className="text-[10px] font-bold text-slate-400 hover:text-red-500 uppercase tracking-widest transition-colors"
         >
           Clear Chat
@@ -5312,7 +5312,7 @@ function ModuleChatbot({ profile, schedule, module, onUpdate, onConfirm }: {
         .map(s => `- ${s.title}: ${format(s.start, 'MMM d, HH:mm')}`)
         .join('\n');
 
-      let systemInstruction = `You are Pfunzo AI (formerly StudyFlow AI), a specialized study assistant for the module "${module.title}". 
+      let systemInstruction = `You are Pfunzo AI, a specialized study assistant for the module "${module.title}". 
       Your goal is to help the student understand the material, answer questions, and provide explanations based on the provided module content.
       
       CURRENT TIME: ${format(now, 'EEEE, MMMM d, yyyy, HH:mm')}
@@ -5346,7 +5346,7 @@ function ModuleChatbot({ profile, schedule, module, onUpdate, onConfirm }: {
       6. If images are provided, analyze them in the context of the module.`;
 
       if (isLanguageModule(module)) {
-        systemInstruction = `You are Pfunzo AI (formerly StudyFlow AI), an advanced South African language AI Tutor and Study Assistant for the module "${module.title}". 
+        systemInstruction = `You are Pfunzo AI, an advanced South African language AI Tutor and Study Assistant for the module "${module.title}". 
         You help students learn South African languages from beginner level (age 3) to university level.
 
         CURRENT TIME: ${format(now, 'EEEE, MMMM d, yyyy, HH:mm')}
@@ -11387,7 +11387,7 @@ function SettingsView({ profile, onUpdate }: any) {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(localProfile, null, 2));
     const downloadAnchorNode = document.createElement('a');
     downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", "studyflow_profile.json");
+    downloadAnchorNode.setAttribute("download", "pfunzo_profile.json");
     document.body.appendChild(downloadAnchorNode);
     downloadAnchorNode.click();
     downloadAnchorNode.remove();
@@ -11843,6 +11843,26 @@ function SettingsView({ profile, onUpdate }: any) {
                     onChange={(v: any) => setLocalProfile({...localProfile, defaultPassMark: parseInt(v)})} 
                     placeholder="e.g. 50"
                   />
+                  {localProfile.studentLevel === 'High School' && (
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-slate-300">Curriculum</label>
+                      <select
+                        value={localProfile.curriculum || ''}
+                        onChange={(e) => setLocalProfile({...localProfile, curriculum: e.target.value})}
+                        className="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                      >
+                        <option value="">Select Curriculum</option>
+                        <option value="CAPS">CAPS</option>
+                        <option value="IEB">IEB (Independent Examinations Board)</option>
+                        <option value="Cambridge">Cambridge (International)</option>
+                        <option value="British">British (Pearson Edexcel)</option>
+                        <option value="American">American</option>
+                        <option value="Waldorf">Waldorf / Steiner Education</option>
+                        <option value="Montessori">Montessori Education</option>
+                        <option value="TVET">Technical & Vocational (TVET pathway in schools)</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
                 <p className="text-xs text-slate-400 mt-4">This value will be used as the default target for new modules you create.</p>
               </section>
