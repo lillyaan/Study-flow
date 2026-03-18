@@ -96,6 +96,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
 import StudyHabitsDashboard from './components/StudyHabitsDashboard';
 import UniversityPortal from './components/UniversityPortal';
+import PastPapersView from './components/PastPapersView';
 import { LiveTutorView, VisualsView, ResearchView } from './components/AIFeatures';
 
 // Set worker for pdfjs
@@ -146,6 +147,24 @@ function addWavHeader(base64Data: string, sampleRate: number = 24000) {
   const wavBlob = new Blob([header, bytes], { type: 'audio/wav' });
   return URL.createObjectURL(wavBlob);
 }
+
+const isSchoolLevel = (level: StudyType) => ['Foundation Phase', 'Intermediate Phase', 'Senior Phase', 'FET Phase'].includes(level);
+
+const getGradeOptions = (level: StudyType) => {
+  switch (level) {
+    case 'Foundation Phase': return ['Grade R', 'Grade 1', 'Grade 2', 'Grade 3'];
+    case 'Intermediate Phase': return ['Grade 4', 'Grade 5', 'Grade 6'];
+    case 'Senior Phase': return ['Grade 7', 'Grade 8', 'Grade 9'];
+    case 'FET Phase': return ['Grade 10', 'Grade 11', 'Grade 12'];
+    case 'University': return ['1st Year', '2nd Year', '3rd Year', '4th Year', 'Honours', 'Masters', 'PhD'];
+    default: return [];
+  }
+};
+
+const getGradeNumber = (grade: string) => {
+  const match = grade.match(/\d+/);
+  return match ? parseInt(match[0]) : 0;
+};
 
 const isLanguageModule = (module: Module) => {
   if (module.isLanguage !== undefined) return module.isLanguage;
@@ -240,7 +259,8 @@ import {
   PracticeExam,
   YoutubeVideo,
   StudyLog,
-  VideoSlide
+  VideoSlide,
+  PastPaper
 } from './types';
 
 // --- Constants ---
@@ -564,7 +584,7 @@ export default function App() {
     testConnection();
   }, []);
 
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'modules' | 'schedule' | 'marks' | 'communities' | 'sharing' | 'settings' | 'virtual_classroom' | 'youtube' | 'analytics' | 'university_portal'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'modules' | 'schedule' | 'marks' | 'communities' | 'sharing' | 'settings' | 'virtual_classroom' | 'youtube' | 'analytics' | 'university_portal' | 'past_papers'>('dashboard');
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [studyLogs, setStudyLogs] = useState<StudyLog[]>([]);
@@ -1401,7 +1421,10 @@ export default function App() {
         {/* Horizontal Navigation Menu Bar */}
         <nav className="flex flex-wrap items-center gap-2 mb-8 bg-white p-2 rounded-3xl border border-slate-100 shadow-sm overflow-x-auto no-scrollbar">
           <SidebarItem active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard size={18} />} label="Dashboard" />
-          <SidebarItem active={activeTab === 'modules'} onClick={() => setActiveTab('modules')} icon={<BookOpen size={18} />} label={profile.studentLevel === 'High School' ? 'Subjects' : 'Modules'} count={modules.length} />
+          <SidebarItem active={activeTab === 'modules'} onClick={() => setActiveTab('modules')} icon={<BookOpen size={18} />} label={isSchoolLevel(profile.studentLevel) ? 'Subjects' : 'Modules'} count={modules.length} />
+          {profile.studentLevel === 'FET Phase' && (
+            <SidebarItem active={activeTab === 'past_papers'} onClick={() => setActiveTab('past_papers')} icon={<FileText size={18} />} label="Past Papers" />
+          )}
           
           <div className="flex items-center gap-1 bg-indigo-50/50 p-1 rounded-2xl border border-indigo-100/50">
             <SidebarItem active={activeTab === 'youtube'} onClick={() => setActiveTab('youtube')} icon={<Youtube size={18} />} label="YouTube" />
@@ -1411,7 +1434,7 @@ export default function App() {
           <SidebarItem active={activeTab === 'schedule'} onClick={() => setActiveTab('schedule')} icon={<Calendar size={18} />} label="Timetable" count={schedule.length} />
           <SidebarItem active={activeTab === 'marks'} onClick={() => setActiveTab('marks')} icon={<CheckCircle2 size={18} />} label="Marks" />
           
-          {profile.studentLevel === 'High School' && parseInt(profile.yearGrade) >= 10 && (
+          {isSchoolLevel(profile.studentLevel) && getGradeNumber(profile.yearGrade) >= 10 && (
             <SidebarItem active={activeTab === 'university_portal'} onClick={() => setActiveTab('university_portal')} icon={<GraduationCap size={18} />} label="Uni Portal" />
           )}
 
@@ -1428,7 +1451,7 @@ export default function App() {
               className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl font-semibold transition-all shadow-lg shadow-indigo-100"
             >
               <Plus size={18} />
-              <span className="hidden sm:inline">New {profile.studentLevel === 'High School' ? 'Subject' : 'Module'}</span>
+              <span className="hidden sm:inline">New {isSchoolLevel(profile.studentLevel) ? 'Subject' : 'Module'}</span>
             </motion.button>
           </div>
         </nav>
@@ -1546,12 +1569,12 @@ export default function App() {
                 <div className="space-y-6">
                   <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8">
                     <h2 className="text-2xl font-bold text-slate-800 mb-2">YouTube Study Resources</h2>
-                    <p className="text-slate-500">Search and analyze YouTube videos for your {profile.studentLevel === 'High School' ? 'subjects' : 'modules'}.</p>
+                    <p className="text-slate-500">Search and analyze YouTube videos for your {isSchoolLevel(profile.studentLevel) ? 'subjects' : 'modules'}.</p>
                   </div>
                   {modules.length > 0 ? (
                     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                       <div className="lg:col-span-1 space-y-2">
-                        <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-4">Select {profile.studentLevel === 'High School' ? 'Subject' : 'Module'}</h3>
+                        <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-4">Select {isSchoolLevel(profile.studentLevel) ? 'Subject' : 'Module'}</h3>
                         <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 no-scrollbar">
                           {modules.map(m => (
                             <button
@@ -1580,8 +1603,8 @@ export default function App() {
                             <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
                               <Youtube className="text-indigo-600" size={32} />
                             </div>
-                            <h3 className="text-lg font-bold text-slate-800 mb-2">Select a {profile.studentLevel === 'High School' ? 'Subject' : 'Module'}</h3>
-                            <p className="text-slate-500 max-w-xs mx-auto">Choose a {profile.studentLevel === 'High School' ? 'subject' : 'module'} from the list to manage its YouTube study resources.</p>
+                            <h3 className="text-lg font-bold text-slate-800 mb-2">Select a {isSchoolLevel(profile.studentLevel) ? 'Subject' : 'Module'}</h3>
+                            <p className="text-slate-500 max-w-xs mx-auto">Choose a {isSchoolLevel(profile.studentLevel) ? 'subject' : 'module'} from the list to manage its YouTube study resources.</p>
                           </div>
                          )}
                       </div>
@@ -1589,8 +1612,8 @@ export default function App() {
                   ) : (
                     <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-12 text-center">
                       <BookOpen className="text-slate-200 mx-auto mb-4" size={48} />
-                      <h3 className="text-lg font-bold text-slate-800 mb-2">No {profile.studentLevel === 'High School' ? 'Subjects' : 'Modules'} Found</h3>
-                      <p className="text-slate-500">Add a {profile.studentLevel === 'High School' ? 'subject' : 'module'} first to use YouTube Study Resources.</p>
+                      <h3 className="text-lg font-bold text-slate-800 mb-2">No {isSchoolLevel(profile.studentLevel) ? 'Subjects' : 'Modules'} Found</h3>
+                      <p className="text-slate-500">Add a {isSchoolLevel(profile.studentLevel) ? 'subject' : 'module'} first to use YouTube Study Resources.</p>
                     </div>
                   )}
                 </div>
@@ -1614,7 +1637,10 @@ export default function App() {
               )}
               {activeTab === 'university_portal' && <UniversityPortal profile={profile} modules={modules} onUpdateProfile={(p) => updateDoc(doc(db, 'users', user.uid), p)} />}
               {activeTab === 'sharing' && <SharingView sharedProfiles={sharedProfiles} onShare={handleShareProfile} />}
-              {activeTab === 'settings' && <SettingsView profile={profile} onUpdate={(p) => updateDoc(doc(db, 'users', user.uid), p)} />}
+              {activeTab === 'past_papers' && (
+                <PastPapersView profile={profile} />
+              )}
+              {activeTab === 'settings' && <SettingsView profile={profile} onUpdate={(p: any) => updateDoc(doc(db, 'users', user.uid), p)} />}
             </AnimatePresence>
           </div>
         </div>
@@ -1627,7 +1653,7 @@ export default function App() {
         
         <div className="space-y-8">
           <section>
-            <h2 className="text-xl font-bold border-b-2 border-indigo-600 pb-2 mb-4">{profile.studentLevel === 'High School' ? 'Subjects' : 'Modules'} & Assessments</h2>
+            <h2 className="text-xl font-bold border-b-2 border-indigo-600 pb-2 mb-4">{isSchoolLevel(profile.studentLevel) ? 'Subjects' : 'Modules'} & Assessments</h2>
             <div className="space-y-6">
               {modules.map(m => (
                 <div key={m.id} className="border-l-4 border-indigo-100 pl-4 py-2">
@@ -1798,7 +1824,7 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
     username: '',
     institution: '',
     studentLevel: 'University' as StudyType,
-    yearGrade: ''
+    yearGrade: '1st Year'
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1830,8 +1856,8 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
           <InputGroup label="Last Name" value={form.lastName} onChange={(v) => setForm({...form, lastName: v})} required />
           <InputGroup label="Username" value={form.username} onChange={(v) => setForm({...form, username: v})} required />
           <InputGroup label="School / University" value={form.institution} onChange={(v) => setForm({...form, institution: v})} required />
-          <SelectGroup label="I am a..." value={form.studentLevel} options={['High School', 'University']} onChange={(v) => setForm({...form, studentLevel: v as StudyType})} />
-          <InputGroup label={form.studentLevel === 'University' ? 'Year of Study' : 'Grade'} value={form.yearGrade} onChange={(v) => setForm({...form, yearGrade: v})} placeholder={form.studentLevel === 'University' ? 'e.g. 2nd Year' : 'e.g. Grade 11'} required />
+          <SelectGroup label="I am a..." value={form.studentLevel} options={['Foundation Phase', 'Intermediate Phase', 'Senior Phase', 'FET Phase', 'University']} onChange={(v) => setForm({...form, studentLevel: v as StudyType, yearGrade: getGradeOptions(v as StudyType)[0]})} />
+          <SelectGroup label={form.studentLevel === 'University' ? 'Year of Study' : 'Grade'} value={form.yearGrade} options={getGradeOptions(form.studentLevel)} onChange={(v) => setForm({...form, yearGrade: v})} />
           
           <div className="md:col-span-2 pt-6">
             <button className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-bold shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all">
@@ -1998,7 +2024,7 @@ function DashboardView({ profile, schedule, studyLogs, modules, onExport, setAct
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label={profile.studentLevel === 'High School' ? 'Subjects' : 'Modules'} value={modules.length} icon={<BookOpen className="text-blue-500" />} />
+        <StatCard label={isSchoolLevel(profile.studentLevel) ? 'Subjects' : 'Modules'} value={modules.length} icon={<BookOpen className="text-blue-500" />} />
         <StatCard label="Study Streak" value={`${profile.studyStats?.currentStreak || 0} Days`} icon={<Zap className="text-amber-500" />} />
         <StatCard label="Exams" value={modules.filter((m: any) => m.moduleType === 'Exam').length} icon={<AlertCircle className="text-amber-500" />} />
         <StatCard label="Badges" value={profile.badges?.length || 0} icon={<Award className="text-purple-500" />} />
@@ -2093,7 +2119,7 @@ function DashboardView({ profile, schedule, studyLogs, modules, onExport, setAct
             <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
           </div>
 
-          {profile.studentLevel === 'High School' && parseInt(profile.yearGrade) >= 10 && (
+          {isSchoolLevel(profile.studentLevel) && getGradeNumber(profile.yearGrade) >= 10 && (
             <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm relative overflow-hidden group">
               <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-indigo-100 transition-all duration-500" />
               <div className="relative z-10">
@@ -2150,13 +2176,13 @@ function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpda
             <button 
               onClick={() => { setFilter('all'); setViewMode('list'); }}
               className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 hover:text-slate-600"
-              title={`Back to all ${profile.studentLevel === 'High School' ? 'subjects' : 'modules'}`}
+              title={`Back to all ${isSchoolLevel(profile.studentLevel) ? 'subjects' : 'modules'}`}
             >
               <ArrowLeft size={20} />
             </button>
           )}
           <h2 className="text-2xl font-bold">
-            {filter === 'all' ? (viewMode === 'list' ? `Your ${profile.studentLevel === 'High School' ? 'Subjects' : 'Modules'}` : 'Academic Translator') : modules.find((m: any) => m.id === filter)?.title}
+            {filter === 'all' ? (viewMode === 'list' ? `Your ${isSchoolLevel(profile.studentLevel) ? 'Subjects' : 'Modules'}` : 'Academic Translator') : modules.find((m: any) => m.id === filter)?.title}
           </h2>
         </div>
         
@@ -2168,7 +2194,7 @@ function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpda
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${viewMode === 'list' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-100' : 'text-slate-500 hover:bg-slate-50'}`}
               >
                 <BookOpen size={14} />
-                {profile.studentLevel === 'High School' ? 'Subjects' : 'Modules'}
+                {isSchoolLevel(profile.studentLevel) ? 'Subjects' : 'Modules'}
               </button>
               <button 
                 onClick={() => setViewMode('translator')}
@@ -2185,7 +2211,7 @@ function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpda
             onChange={(e) => { setFilter(e.target.value); setViewMode('list'); }}
             className="bg-white border border-slate-100 rounded-xl px-4 py-2 text-sm font-bold text-slate-600 shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all cursor-pointer"
           >
-            <option value="all">All {profile.studentLevel === 'High School' ? 'Subjects' : 'Modules'}</option>
+            <option value="all">All {isSchoolLevel(profile.studentLevel) ? 'Subjects' : 'Modules'}</option>
             {modules.map((m: any) => (
               <option key={m.id} value={m.id}>{m.title}</option>
             ))}
@@ -2359,7 +2385,7 @@ function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpda
           <div className="bg-white rounded-[2rem] p-16 border-2 border-dashed border-slate-100 text-center">
             <BookOpen size={48} className="mx-auto text-slate-200 mb-4" />
             <p className="text-slate-400">
-              {filter === 'all' ? `No ${profile.studentLevel === 'High School' ? 'subjects' : 'modules'} added yet. Click "New ${profile.studentLevel === 'High School' ? 'Subject' : 'Module'}" to start.` : `Selected ${profile.studentLevel === 'High School' ? 'subject' : 'module'} not found.`}
+              {filter === 'all' ? `No ${isSchoolLevel(profile.studentLevel) ? 'subjects' : 'modules'} added yet. Click "New ${isSchoolLevel(profile.studentLevel) ? 'Subject' : 'Module'}" to start.` : `Selected ${isSchoolLevel(profile.studentLevel) ? 'subject' : 'module'} not found.`}
             </p>
           </div>
         )}
@@ -11673,6 +11699,8 @@ function SettingsView({ profile, onUpdate }: any) {
                   <InputGroup label="Username" value={localProfile.username} onChange={(v: string) => setLocalProfile({...localProfile, username: v})} />
                   <InputGroup label="Cell Phone" value={localProfile.cellPhone || ''} onChange={(v: string) => setLocalProfile({...localProfile, cellPhone: v})} placeholder="+1 (555) 000-0000" />
                   <InputGroup label="Date of Birth" type="date" value={localProfile.dateOfBirth || ''} onChange={(v: string) => setLocalProfile({...localProfile, dateOfBirth: v})} />
+                  <SelectGroup label="I am a..." value={localProfile.studentLevel} options={['Foundation Phase', 'Intermediate Phase', 'Senior Phase', 'FET Phase', 'University']} onChange={(v: string) => setLocalProfile({...localProfile, studentLevel: v as StudyType, yearGrade: getGradeOptions(v as StudyType)[0]})} />
+                  <SelectGroup label={localProfile.studentLevel === 'University' ? 'Year of Study' : 'Grade'} value={localProfile.yearGrade} options={getGradeOptions(localProfile.studentLevel)} onChange={(v: string) => setLocalProfile({...localProfile, yearGrade: v})} />
                   <div className="md:col-span-2">
                     <InputGroup label="Address" value={localProfile.address || ''} onChange={(v: string) => setLocalProfile({...localProfile, address: v})} placeholder="123 Study Lane, Knowledge City" />
                   </div>
@@ -11837,7 +11865,7 @@ function SettingsView({ profile, onUpdate }: any) {
                     onChange={(v: any) => setLocalProfile({...localProfile, defaultPassMark: parseInt(v)})} 
                     placeholder="e.g. 50"
                   />
-                  {localProfile.studentLevel === 'High School' && (
+                  {isSchoolLevel(localProfile.studentLevel) && (
                     <div className="space-y-2">
                       <label className="block text-sm font-medium text-slate-300">Curriculum</label>
                       <select

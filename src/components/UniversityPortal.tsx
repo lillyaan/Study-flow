@@ -46,8 +46,8 @@ const UniversityPortal: React.FC<{ profile?: UserProfile | null, modules?: Modul
       return profile.apsSubjects;
     }
     
-    // If high school user and has modules, initialize from modules
-    if (profile?.studentLevel === 'High School' && modules && modules.length > 0) {
+    // If school user and has modules, initialize from modules
+    if (profile?.studentLevel !== 'University' && modules && modules.length > 0) {
       const initialSubjects: APSSubject[] = modules.map(m => ({
         name: m.title,
         mark: m.examMark || 0,
@@ -242,7 +242,7 @@ const UniversityPortal: React.FC<{ profile?: UserProfile | null, modules?: Modul
                     Calculate Your APS
                   </h3>
                   <div className="flex items-center gap-2">
-                    {profile?.studentLevel === 'High School' && modules && modules.length > 0 && (
+                    {profile?.studentLevel !== 'University' && modules && modules.length > 0 && (
                       <button 
                         onClick={() => {
                           const initialSubjects: APSSubject[] = modules.map(m => ({

@@ -1,7 +1,19 @@
-export type StudyType = 'High School' | 'University';
+export type StudyType = 'Foundation Phase' | 'Intermediate Phase' | 'Senior Phase' | 'FET Phase' | 'University';
 export type ModuleType = 'Exam' | 'Portfolio' | 'Assessment Only';
 
 export type AssessmentStatus = 'Done' | 'In Progress' | 'Missed' | 'Incomplete';
+
+export interface PastPaper {
+  id: string;
+  subject: string;
+  year: number;
+  month: 'Feb/Mar' | 'May/June' | 'Oct/Nov' | 'March' | 'June' | 'October' | 'November';
+  paperNumber: 1 | 2 | 3;
+  province?: 'Gauteng' | 'Western Cape' | 'KwaZulu-Natal' | 'Eastern Cape' | 'Free State' | 'Limpopo' | 'Mpumalanga' | 'North West' | 'Northern Cape';
+  board: 'DBE' | 'IEB' | 'SACAI';
+  url: string;
+  memoUrl?: string;
+}
 
 export interface Assessment {
   id: string;
