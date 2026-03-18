@@ -215,7 +215,7 @@ import html2canvas from 'html2canvas';
 import * as XLSX from 'xlsx';
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType } from 'docx';
 import { saveAs } from 'file-saver';
-import { GoogleGenAI, Type, Modality } from "@google/genai";
+import { GoogleGenAI, Modality } from "@google/genai";
 import { checkAndAwardBadges, updateStudyStreak, AVAILABLE_BADGES } from './services/badgeService';
 import Markdown from 'react-markdown';
 import mermaid from 'mermaid';
@@ -298,12 +298,20 @@ function AIErrorMessage({ message, onRetry }: { message: string, onRetry?: () =>
         guidance: "Please check your internet connection and try again."
       };
     }
-    if (lowerMsg.includes('api key') || lowerMsg.includes('invalid')) {
+    if (lowerMsg.includes('api key')) {
       return {
         title: "Configuration Error",
-        description: "There's an issue with the AI setup.",
+        description: "There's an issue with the AI setup (API Key).",
         icon: <Settings size={16} />,
         guidance: "Please refresh the page or contact support if this persists."
+      };
+    }
+    if (lowerMsg.includes('invalid')) {
+      return {
+        title: "Invalid Request",
+        description: msg,
+        icon: <AlertCircle size={16} />,
+        guidance: "Please try again or contact support if this persists."
       };
     }
     return {
@@ -883,21 +891,7 @@ export default function App() {
         model,
         contents: prompt,
         config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                title: { type: Type.STRING },
-                type: { type: Type.STRING, enum: ['study_session', 'exam_prep', 'assignment', 'assessment_due', 'exam', 'portfolio_prep', 'portfolio'] },
-                start: { type: Type.STRING },
-                end: { type: Type.STRING },
-                moduleId: { type: Type.STRING }
-              },
-              required: ['title', 'type', 'start', 'end']
-            }
-          }
+          responseMimeType: "application/json"
         }
       });
 
