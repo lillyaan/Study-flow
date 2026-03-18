@@ -84,6 +84,7 @@ import {
   Briefcase,
   ClipboardCheck,
   Pin,
+  Flag,
   Linkedin,
   Github,
   Twitter,
@@ -649,20 +650,16 @@ export default function App() {
 
   // Auth State
   useEffect(() => {
+    let unsubscribeProfile: (() => void) | undefined;
     let unsubscribeSchedule: (() => void) | undefined;
     let unsubscribeStudyLogs: (() => void) | undefined;
     let unsubscribeModules: (() => void) | undefined;
     let unsubscribeSharedProfiles: (() => void) | undefined;
 
-    const unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
       if (u) {
         setUser(u);
-        const p = await fetchProfile(u.uid);
-        if (p?.trackLogin) {
-          await updateDoc(doc(db, 'users', u.uid), {
-            lastLogin: serverTimestamp()
-          });
-        }
+        unsubscribeProfile = fetchProfile(u.uid);
         unsubscribeModules = fetchModules(u.uid);
         unsubscribeSharedProfiles = fetchSharedProfiles(u.uid);
         unsubscribeSchedule = fetchSchedule(u.uid);
@@ -673,6 +670,7 @@ export default function App() {
         setModules([]);
         setSchedule([]);
         setStudyLogs([]);
+        if (unsubscribeProfile) unsubscribeProfile();
         if (unsubscribeSchedule) unsubscribeSchedule();
         if (unsubscribeStudyLogs) unsubscribeStudyLogs();
         if (unsubscribeModules) unsubscribeModules();
@@ -682,6 +680,7 @@ export default function App() {
     });
     return () => {
       unsubscribeAuth();
+      if (unsubscribeProfile) unsubscribeProfile();
       if (unsubscribeSchedule) unsubscribeSchedule();
       if (unsubscribeStudyLogs) unsubscribeStudyLogs();
       if (unsubscribeModules) unsubscribeModules();
@@ -716,15 +715,25 @@ export default function App() {
     });
   };
 
-  const fetchProfile = async (uid: string) => {
+  const fetchProfile = (uid: string) => {
     const docRef = doc(db, 'users', uid);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      const data = docSnap.data() as UserProfile;
-      setProfile(data);
-      return data;
-    }
-    return null;
+    return onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data() as UserProfile;
+        setProfile(data);
+        
+        // Track login if enabled
+        if (data.trackLogin && !data.lastLogin?.toDate || (data.lastLogin?.toDate && new Date().getTime() - data.lastLogin.toDate().getTime() > 3600000)) {
+          updateDoc(docRef, {
+            lastLogin: serverTimestamp()
+          }).catch(console.error);
+        }
+      } else {
+        setProfile(null);
+      }
+    }, (error) => {
+      console.error("Error fetching profile:", error);
+    });
   };
 
   const fetchModules = (uid: string) => {
@@ -1365,7 +1374,7 @@ export default function App() {
   }
 
   if (!profile) {
-    return <OnboardingScreen onComplete={() => fetchProfile(user.uid)} />;
+    return <OnboardingScreen onComplete={() => {}} />;
   }
 
   return (
@@ -1640,7 +1649,13 @@ export default function App() {
               {activeTab === 'past_papers' && (
                 <PastPapersView profile={profile} />
               )}
-              {activeTab === 'settings' && <SettingsView profile={profile} onUpdate={(p: any) => updateDoc(doc(db, 'users', user.uid), p)} />}
+              {activeTab === 'settings' && (
+                <SettingsView 
+                  profile={profile} 
+                  onUpdate={(p: any) => updateDoc(doc(db, 'users', user.uid), p)} 
+                  onConfirm={confirmAction}
+                />
+              )}
             </AnimatePresence>
           </div>
         </div>
@@ -1827,18 +1842,41 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
     yearGrade: '1st Year'
   });
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const user = auth.currentUser;
     if (!user) return;
 
-    await setDoc(doc(db, 'users', user.uid), {
-      ...form,
-      uid: user.uid,
-      email: user.email,
-      sharedWith: []
-    });
-    onComplete();
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await setDoc(doc(db, 'users', user.uid), {
+        ...form,
+        uid: user.uid,
+        email: user.email,
+        sharedWith: [],
+        studyStats: {
+          currentStreak: 0,
+          longestStreak: 0,
+          totalStudyHours: 0,
+          quizzesCompleted: 0,
+          perfectScores: 0,
+          modulesCompleted: 0
+        },
+        badges: [],
+        autoSaveSettings: true,
+        trackLogin: true
+      });
+      onComplete();
+    } catch (err: any) {
+      console.error("Error completing setup:", err);
+      setError(err.message || "Failed to complete setup. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -1849,7 +1887,14 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
         className="max-w-2xl w-full bg-white rounded-[2.5rem] p-12 shadow-2xl shadow-slate-200 border border-slate-100"
       >
         <h1 className="text-3xl font-bold mb-2">Complete Your Profile</h1>
-        <p className="text-slate-400 mb-10">Tell us a bit about your studies to personalize your experience.</p>
+        <p className="text-slate-400 mb-6">Tell us a bit about your studies to personalize your experience.</p>
+
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm font-medium flex items-center gap-2">
+            <AlertCircle size={18} />
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <InputGroup label="First Name" value={form.firstName} onChange={(v) => setForm({...form, firstName: v})} required />
@@ -1860,8 +1905,18 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
           <SelectGroup label={form.studentLevel === 'University' ? 'Year of Study' : 'Grade'} value={form.yearGrade} options={getGradeOptions(form.studentLevel)} onChange={(v) => setForm({...form, yearGrade: v})} />
           
           <div className="md:col-span-2 pt-6">
-            <button className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-bold shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all">
-              Complete Setup
+            <button 
+              disabled={isSubmitting}
+              className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-bold shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isSubmitting ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Complete Setup"
+              )}
             </button>
           </div>
         </form>
@@ -8354,9 +8409,15 @@ function ModulePracticeExam({ module, onUpdate, selectedUnitId }: { module: Modu
   const [exam, setExam] = useState<PracticeExam | null>(null);
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [flaggedQuestions, setFlaggedQuestions] = useState<Set<string>>(new Set());
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [examConfig, setExamConfig] = useState({
+    questionCount: 10,
+    timeLimit: 15,
+    difficulty: 'Medium' as 'Easy' | 'Medium' | 'Hard'
+  });
 
   const selectedUnit = module.units?.find(u => u.id === selectedUnitId);
   const currentExams = selectedUnit ? selectedUnit.practiceExams : module.practiceExams;
@@ -8380,7 +8441,8 @@ function ModulePracticeExam({ module, onUpdate, selectedUnitId }: { module: Modu
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: `Generate a comprehensive practice exam for the module "${module.title}" ${unitContext}. 
-        Include 10 multiple choice questions covering various topics from the provided content.
+        Difficulty Level: ${examConfig.difficulty}
+        Include ${examConfig.questionCount} multiple choice questions covering various topics from the provided content.
         Each question should have 4 options and one correct answer.
         Include a detailed, educational explanation for the correct answer.
         Also, identify 2-4 "keyConcepts" (short phrases or terms) that appear in the explanation which are central to understanding the answer.
@@ -8405,11 +8467,13 @@ function ModulePracticeExam({ module, onUpdate, selectedUnitId }: { module: Modu
         id: Math.random().toString(36).substr(2, 9),
         title: dataResponse.title || (selectedUnit ? `Unit ${selectedUnit.unitNumber} Practice Exam` : `${module.title} Practice Exam`),
         questions: dataResponse.questions.map((q: any) => ({ ...q, id: Math.random().toString(36).substr(2, 9) })),
-        timeLimit: 15
+        timeLimit: examConfig.timeLimit,
+        difficulty: examConfig.difficulty
       };
       setExam(newExam);
       setCurrentQuestionIdx(0);
       setAnswers({});
+      setFlaggedQuestions(new Set());
       setIsSubmitted(false);
       setTimeLeft(newExam.timeLimit * 60);
     } catch (error: any) {
@@ -8468,31 +8532,80 @@ function ModulePracticeExam({ module, onUpdate, selectedUnitId }: { module: Modu
           </div>
         )}
 
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest px-2">Questions</label>
+            <select 
+              value={examConfig.questionCount}
+              onChange={(e) => setExamConfig(prev => ({ ...prev, questionCount: parseInt(e.target.value) }))}
+              className="w-full p-3 rounded-2xl border border-slate-100 bg-slate-50 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+            >
+              <option value={5}>5 Questions</option>
+              <option value={10}>10 Questions</option>
+              <option value={20}>20 Questions</option>
+              <option value={50}>50 Questions</option>
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest px-2">Time Limit</label>
+            <select 
+              value={examConfig.timeLimit}
+              onChange={(e) => setExamConfig(prev => ({ ...prev, timeLimit: parseInt(e.target.value) }))}
+              className="w-full p-3 rounded-2xl border border-slate-100 bg-slate-50 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+            >
+              <option value={10}>10 Minutes</option>
+              <option value={15}>15 Minutes</option>
+              <option value={30}>30 Minutes</option>
+              <option value={60}>60 Minutes</option>
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest px-2">Difficulty</label>
+            <select 
+              value={examConfig.difficulty}
+              onChange={(e) => setExamConfig(prev => ({ ...prev, difficulty: e.target.value as any }))}
+              className="w-full p-3 rounded-2xl border border-slate-100 bg-slate-50 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+            >
+              <option value="Easy">Easy</option>
+              <option value="Medium">Medium</option>
+              <option value="Hard">Hard</option>
+            </select>
+          </div>
+        </div>
+
         {currentExams && currentExams.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-            {currentExams.map((ex) => (
-              <button
-                key={ex.id}
-                onClick={() => {
-                  setExam(ex);
-                  setCurrentQuestionIdx(0);
-                  setAnswers({});
-                  setIsSubmitted(false);
-                  setTimeLeft((ex.timeLimit || 15) * 60);
-                }}
-                className="p-6 rounded-3xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-md transition-all text-left group"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <h6 className="font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{ex.title}</h6>
-                  {ex.lastScore !== undefined && (
-                    <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${ex.lastScore >= 50 ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
-                      {ex.lastScore}%
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-400">{ex.questions.length} Questions • {ex.timeLimit} Minutes</p>
-              </button>
-            ))}
+          <div className="mb-8">
+            <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest px-2 block mb-3">Previous Attempts</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {currentExams.map((ex) => (
+                <button
+                  key={ex.id}
+                  onClick={() => {
+                    setExam(ex);
+                    setCurrentQuestionIdx(0);
+                    setAnswers({});
+                    setFlaggedQuestions(new Set());
+                    setIsSubmitted(false);
+                    setTimeLeft((ex.timeLimit || 15) * 60);
+                  }}
+                  className="p-6 rounded-3xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-md transition-all text-left group"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <h6 className="font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{ex.title}</h6>
+                    {ex.lastScore !== undefined && (
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${ex.lastScore >= 50 ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+                        {ex.lastScore}%
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-slate-400">
+                    <span className="flex items-center gap-1"><List size={12} /> {ex.questions.length} Qs</span>
+                    <span className="flex items-center gap-1"><Clock size={12} /> {ex.timeLimit} Min</span>
+                    {ex.difficulty && <span className="flex items-center gap-1"><Zap size={12} /> {ex.difficulty}</span>}
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         )}
         
@@ -8517,7 +8630,14 @@ function ModulePracticeExam({ module, onUpdate, selectedUnitId }: { module: Modu
           </div>
           <div>
             <h5 className="font-bold text-slate-800">{exam.title}</h5>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Question {currentQuestionIdx + 1} of {exam.questions.length}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Question {currentQuestionIdx + 1} of {exam.questions.length}</p>
+              {exam.difficulty && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 uppercase tracking-widest">
+                  {exam.difficulty}
+                </span>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -8535,6 +8655,16 @@ function ModulePracticeExam({ module, onUpdate, selectedUnitId }: { module: Modu
           )}
         </div>
       </div>
+
+      {!isSubmitted && (
+        <div className="h-1.5 w-full bg-slate-100">
+          <motion.div 
+            initial={{ width: 0 }}
+            animate={{ width: `${((currentQuestionIdx + 1) / exam.questions.length) * 100}%` }}
+            className="h-full bg-indigo-500"
+          />
+        </div>
+      )}
 
       <div className="p-8">
         {isSubmitted ? (
@@ -8586,7 +8716,24 @@ function ModulePracticeExam({ module, onUpdate, selectedUnitId }: { module: Modu
           </div>
         ) : (
           <div className="space-y-6">
-            <h6 className="text-lg font-bold text-slate-800">{currentQuestion.question}</h6>
+            <div className="flex items-center justify-between">
+              <h6 className="text-lg font-bold text-slate-800">{currentQuestion.question}</h6>
+              <button 
+                onClick={() => {
+                  const newFlagged = new Set(flaggedQuestions);
+                  if (newFlagged.has(currentQuestion.id)) {
+                    newFlagged.delete(currentQuestion.id);
+                  } else {
+                    newFlagged.add(currentQuestion.id);
+                  }
+                  setFlaggedQuestions(newFlagged);
+                }}
+                className={`p-2 rounded-xl transition-all ${flaggedQuestions.has(currentQuestion.id) ? 'bg-amber-100 text-amber-600' : 'text-slate-300 hover:text-slate-400 hover:bg-slate-50'}`}
+                title="Flag for review"
+              >
+                <Flag size={20} fill={flaggedQuestions.has(currentQuestion.id) ? 'currentColor' : 'none'} />
+              </button>
+            </div>
             <div className="grid grid-cols-1 gap-3">
               {currentQuestion.options.map((opt, idx) => (
                 <button 
@@ -8609,21 +8756,67 @@ function ModulePracticeExam({ module, onUpdate, selectedUnitId }: { module: Modu
                 </button>
               ))}
             </div>
-            <div className="flex justify-between pt-6 border-t border-slate-100">
-              <button 
-                onClick={() => setCurrentQuestionIdx(prev => Math.max(0, prev - 1))}
-                disabled={currentQuestionIdx === 0}
-                className="text-slate-400 hover:text-slate-600 disabled:opacity-30"
-              >
-                <ChevronLeft size={24} />
-              </button>
-              <button 
-                onClick={() => setCurrentQuestionIdx(prev => Math.min(exam.questions.length - 1, prev + 1))}
-                disabled={currentQuestionIdx === exam.questions.length - 1}
-                className="text-slate-400 hover:text-slate-600 disabled:opacity-30"
-              >
-                <ChevronRight size={24} />
-              </button>
+            
+            <div className="flex items-center justify-between pt-6 border-t border-slate-100">
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setCurrentQuestionIdx(prev => Math.max(0, prev - 1))}
+                  disabled={currentQuestionIdx === 0}
+                  className="p-2 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-30 transition-all"
+                >
+                  <ChevronLeft size={24} />
+                </button>
+                <div className="flex items-center gap-1">
+                  {exam.questions.map((q, idx) => (
+                    <button
+                      key={q.id}
+                      onClick={() => setCurrentQuestionIdx(idx)}
+                      className={`w-2 h-2 rounded-full transition-all ${
+                        currentQuestionIdx === idx 
+                          ? 'w-6 bg-indigo-600' 
+                          : flaggedQuestions.has(q.id)
+                            ? 'bg-amber-400'
+                            : answers[q.id] !== undefined
+                              ? 'bg-indigo-200'
+                              : 'bg-slate-200'
+                      }`}
+                    />
+                  ))}
+                </div>
+                <button 
+                  onClick={() => setCurrentQuestionIdx(prev => Math.min(exam.questions.length - 1, prev + 1))}
+                  disabled={currentQuestionIdx === exam.questions.length - 1}
+                  className="p-2 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-30 transition-all"
+                >
+                  <ChevronRight size={24} />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  {Object.keys(answers).length} of {exam.questions.length} Answered
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 mt-4">
+              {exam.questions.map((q, idx) => (
+                <button
+                  key={q.id}
+                  onClick={() => setCurrentQuestionIdx(idx)}
+                  className={`h-8 rounded-lg text-[10px] font-bold transition-all border ${
+                    currentQuestionIdx === idx
+                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                      : flaggedQuestions.has(q.id)
+                        ? 'bg-amber-50 border-amber-200 text-amber-600'
+                        : answers[q.id] !== undefined
+                          ? 'bg-indigo-50 border-indigo-100 text-indigo-600'
+                          : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
+                  }`}
+                >
+                  {idx + 1}
+                </button>
+              ))}
             </div>
           </div>
         )}
@@ -11194,9 +11387,10 @@ function MarksView({ modules, onUpdate }: any) {
   );
 }
 
-function SettingsView({ profile, onUpdate }: any) {
+function SettingsView({ profile, onUpdate, onConfirm }: any) {
   const [localProfile, setLocalProfile] = useState(profile);
   const [isSaving, setIsSaving] = useState(false);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [isTestingVoice, setIsTestingVoice] = useState(false);
   const [testAudioUrl, setTestAudioUrl] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -11290,6 +11484,28 @@ function SettingsView({ profile, onUpdate }: any) {
     setLocalProfile(profile);
     setIsOtherInstitution(!INSTITUTIONS.includes(profile.institution) && profile.institution !== '');
   }, [profile]);
+
+  // Auto-save logic
+  useEffect(() => {
+    if (!localProfile || !localProfile.autoSaveSettings) return;
+    
+    // Check if there are actual changes compared to the last saved profile
+    const hasChanges = JSON.stringify(localProfile) !== JSON.stringify(profile);
+    if (!hasChanges) return;
+
+    const timer = setTimeout(async () => {
+      setIsAutoSaving(true);
+      try {
+        await onUpdate(localProfile);
+      } catch (error) {
+        console.error("Auto-save error:", error);
+      } finally {
+        setIsAutoSaving(false);
+      }
+    }, 2000); // 2 seconds debounce
+
+    return () => clearTimeout(timer);
+  }, [localProfile, profile, onUpdate]);
 
   const handleInstitutionChange = (val: string) => {
     if (val === 'other') {
@@ -11416,51 +11632,45 @@ function SettingsView({ profile, onUpdate }: any) {
   const handleDeleteAccount = async () => {
     if (!auth.currentUser) return;
     
-    const confirmed = window.confirm(
-      "CRITICAL ACTION: Are you absolutely sure you want to delete your account? " +
-      "This will permanently erase your profile, modules, schedule, and all study data. " +
-      "This action CANNOT be undone."
+    onConfirm(
+      "CRITICAL ACTION: Delete Account",
+      "Are you absolutely sure you want to delete your account? This will permanently erase your profile, modules, schedule, and all study data. This action CANNOT be undone.",
+      async () => {
+        setIsSaving(true);
+        try {
+          const uid = auth.currentUser!.uid;
+          
+          // 1. Delete subcollections (modules, schedule, studyLogs)
+          const subcollections = ['modules', 'schedule', 'studyLogs'];
+          for (const sub of subcollections) {
+            const q = query(collection(db, `users/${uid}/${sub}`));
+            const snapshot = await getDocs(q);
+            const batch = writeBatch(db);
+            snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+            await batch.commit();
+          }
+          
+          // 2. Delete user document
+          await deleteDoc(doc(db, 'users', uid));
+          
+          // 3. Delete auth account
+          await deleteUser(auth.currentUser!);
+          
+          // The app will automatically redirect to auth screen due to onAuthStateChanged
+        } catch (err: any) {
+          console.error("Error deleting account:", err);
+          if (err.code === 'auth/requires-recent-login') {
+            setError("For security reasons, you must have logged in recently to delete your account. Please log out and log back in, then try again.");
+          } else {
+            setError("Failed to delete account: " + err.message);
+          }
+        } finally {
+          setIsSaving(false);
+        }
+      },
+      "Delete Permanently",
+      true
     );
-    
-    if (!confirmed) return;
-    
-    const doubleConfirmed = window.confirm(
-      "FINAL WARNING: Please confirm one last time. All your progress will be lost forever."
-    );
-    
-    if (!doubleConfirmed) return;
-
-    setIsSaving(true);
-    try {
-      const uid = auth.currentUser.uid;
-      
-      // 1. Delete subcollections (modules, schedule, studyLogs)
-      const subcollections = ['modules', 'schedule', 'studyLogs'];
-      for (const sub of subcollections) {
-        const q = query(collection(db, `users/${uid}/${sub}`));
-        const snapshot = await getDocs(q);
-        const batch = writeBatch(db);
-        snapshot.docs.forEach((doc) => batch.delete(doc.ref));
-        await batch.commit();
-      }
-      
-      // 2. Delete user document
-      await deleteDoc(doc(db, 'users', uid));
-      
-      // 3. Delete auth account
-      await deleteUser(auth.currentUser);
-      
-      // The app will automatically redirect to auth screen due to onAuthStateChanged
-    } catch (err: any) {
-      console.error("Error deleting account:", err);
-      if (err.code === 'auth/requires-recent-login') {
-        setError("For security reasons, you must have logged in recently to delete your account. Please log out and log back in, then try again.");
-      } else {
-        setError("Failed to delete account: " + err.message);
-      }
-    } finally {
-      setIsSaving(false);
-    }
   };
 
   return (
@@ -11471,6 +11681,16 @@ function SettingsView({ profile, onUpdate }: any) {
           <p className="text-slate-400 text-sm">Manage your profile, study habits, and AI tutor preferences.</p>
         </div>
         <div className="flex items-center gap-3">
+          {isAutoSaving && (
+            <motion.div 
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-500 uppercase tracking-widest bg-indigo-50 px-3 py-1.5 rounded-full"
+            >
+              <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />
+              Auto-saving...
+            </motion.div>
+          )}
           <button 
             onClick={handleSave}
             disabled={isSaving}
@@ -12014,8 +12234,21 @@ function SettingsView({ profile, onUpdate }: any) {
             >
               <section>
                 <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-6">Data Management</h3>
-                <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 space-y-4">
-                  <div className="flex items-center justify-between">
+                <div className="space-y-4">
+                  <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-700">Auto-save Settings</h4>
+                      <p className="text-xs text-slate-400">Automatically save changes as you make them.</p>
+                    </div>
+                    <button 
+                      onClick={() => setLocalProfile({ ...localProfile, autoSaveSettings: !localProfile.autoSaveSettings })}
+                      className={`w-12 h-6 rounded-full transition-all relative ${localProfile.autoSaveSettings ? 'bg-indigo-600' : 'bg-slate-300'}`}
+                    >
+                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${localProfile.autoSaveSettings ? 'left-7' : 'left-1'}`} />
+                    </button>
+                  </div>
+
+                  <div className="p-6 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between">
                     <div>
                       <h4 className="text-sm font-bold text-slate-700">Export Your Data</h4>
                       <p className="text-xs text-slate-400">Download a copy of your profile and settings in JSON format.</p>
@@ -12041,22 +12274,28 @@ function SettingsView({ profile, onUpdate }: any) {
                     </div>
                     <button 
                       onClick={() => {
-                        if (confirm("Are you sure you want to reset your study progress? This cannot be undone.")) {
-                          setLocalProfile({
-                            ...localProfile,
-                            studyStats: {
-                              currentStreak: 0,
-                              longestStreak: 0,
-                              totalStudyHours: 0,
-                              quizzesCompleted: 0,
-                              perfectScores: 0,
-                              modulesCompleted: 0,
-                              lastStudyDate: null
-                            }
-                          });
-                          setError("Study progress reset. Save changes to finalize.");
-                          setTimeout(() => setError(null), 5000);
-                        }
+                        onConfirm(
+                          "Reset Study Progress",
+                          "Are you sure you want to reset your study progress? This will clear your study streaks and statistics. This action is irreversible.",
+                          () => {
+                            setLocalProfile({
+                              ...localProfile,
+                              studyStats: {
+                                currentStreak: 0,
+                                longestStreak: 0,
+                                totalStudyHours: 0,
+                                quizzesCompleted: 0,
+                                perfectScores: 0,
+                                modulesCompleted: 0,
+                                lastStudyDate: null
+                              }
+                            });
+                            setError("Study progress reset. Save changes to finalize.");
+                            setTimeout(() => setError(null), 5000);
+                          },
+                          "Reset Progress",
+                          true
+                        );
                       }}
                       className="flex items-center gap-2 px-4 py-2 bg-white border border-rose-200 text-rose-600 rounded-xl text-xs font-bold hover:bg-rose-100 transition-all"
                     >

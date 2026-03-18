@@ -71,6 +71,7 @@ export interface PracticeExam {
   title: string;
   questions: PracticeExamQuestion[];
   timeLimit?: number; // in minutes
+  difficulty?: 'Easy' | 'Medium' | 'Hard';
   lastScore?: number;
   completedAt?: any;
 }
@@ -181,6 +182,7 @@ export interface UserProfile {
   defaultPassMark?: number; // Global default pass mark
   trackLogin?: boolean;
   autoUpdateTime?: boolean;
+  autoSaveSettings?: boolean;
   timezone?: string;
   lastLogin?: any;
   photoURL?: string;
