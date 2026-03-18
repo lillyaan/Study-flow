@@ -1,5 +1,5 @@
 {
   "name": "Pfunzo AI",
   "description": "A smart learning platform for summaries, quizzes, flashcards, AI chat, and study planning.",
-  "requestFramePermissions": ["microphone"]
+  "requestFramePermissions": ["microphone", "geolocation"]
 }

@@ -143,6 +143,19 @@ const UniversityPortal: React.FC = () => {
     );
   }, [searchQuery]);
 
+  const qualifiedCourses = useMemo(() => {
+    const courses: { uniName: string, course: string, minAps: number }[] = [];
+    SAMPLE_UNIVERSITIES.forEach(uni => {
+      uni.apsRequirements?.forEach(req => {
+        // Exclude universities with different scoring systems (like UCT with 400+ points)
+        if (req.minAps <= 50 && totalAPS >= req.minAps) {
+          courses.push({ uniName: uni.name, course: req.course, minAps: req.minAps });
+        }
+      });
+    });
+    return courses.sort((a, b) => b.minAps - a.minAps);
+  }, [totalAPS]);
+
   const handleMarkChange = (index: number, mark: number) => {
     const newSubjects = [...subjects];
     newSubjects[index].mark = Math.min(100, Math.max(0, mark));
@@ -310,6 +323,36 @@ const UniversityPortal: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {totalAPS > 0 && (
+                <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
+                  <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+                    <CheckCircle2 className="text-emerald-500" />
+                    Courses You Qualify For
+                  </h3>
+                  {qualifiedCourses.length > 0 ? (
+                    <div className="space-y-4">
+                      {qualifiedCourses.map((course, idx) => (
+                        <div key={idx} className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div>
+                            <h4 className="font-bold text-slate-800">{course.course}</h4>
+                            <p className="text-xs text-slate-500 mt-1">{course.uniName}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">
+                              Min APS: {course.minAps}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 bg-slate-50 rounded-2xl border border-slate-100">
+                      <p className="text-slate-500 text-sm">You don't meet the minimum APS for the sample courses yet. Keep working hard to improve your marks!</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="space-y-6">

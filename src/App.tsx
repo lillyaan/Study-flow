@@ -96,6 +96,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
 import StudyHabitsDashboard from './components/StudyHabitsDashboard';
 import UniversityPortal from './components/UniversityPortal';
+import { LiveTutorView, VisualsView, ResearchView } from './components/AIFeatures';
 
 // Set worker for pdfjs
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -1145,25 +1146,6 @@ export default function App() {
     );
   };
 
-  const handleAddAssessment = async (moduleId: string) => {
-    if (!user) return;
-    const moduleRef = doc(db, 'users', user.uid, 'modules', moduleId);
-    const modSnap = await getDoc(moduleRef);
-    if (modSnap.exists()) {
-      const assessments = modSnap.data().assessments || [];
-      const newAss = {
-        id: crypto.randomUUID(),
-        title: 'New Assignment',
-        dueDate: format(addDays(new Date(), 7), 'yyyy-MM-dd'),
-        dueTime: '23:59',
-        weight: 10,
-        status: 'Incomplete',
-        studyUnits: []
-      };
-      await updateDoc(moduleRef, { assessments: [...assessments, newAss] });
-    }
-  };
-
   const handleSendMessage = async (text: string) => {
     if (!user || !activeCommunity || !text.trim()) return;
     await addDoc(collection(db, 'communities', activeCommunity.id, 'messages'), {
@@ -1425,7 +1407,7 @@ export default function App() {
         {/* Horizontal Navigation Menu Bar */}
         <nav className="flex flex-wrap items-center gap-2 mb-8 bg-white p-2 rounded-3xl border border-slate-100 shadow-sm overflow-x-auto no-scrollbar">
           <SidebarItem active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={<LayoutDashboard size={18} />} label="Dashboard" />
-          <SidebarItem active={activeTab === 'modules'} onClick={() => setActiveTab('modules')} icon={<BookOpen size={18} />} label="Modules" count={modules.length} />
+          <SidebarItem active={activeTab === 'modules'} onClick={() => setActiveTab('modules')} icon={<BookOpen size={18} />} label={profile.studentLevel === 'High School' ? 'Subjects' : 'Modules'} count={modules.length} />
           
           <div className="flex items-center gap-1 bg-indigo-50/50 p-1 rounded-2xl border border-indigo-100/50">
             <SidebarItem active={activeTab === 'youtube'} onClick={() => setActiveTab('youtube')} icon={<Youtube size={18} />} label="YouTube" />
@@ -1452,7 +1434,7 @@ export default function App() {
               className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl font-semibold transition-all shadow-lg shadow-indigo-100"
             >
               <Plus size={18} />
-              <span className="hidden sm:inline">New Module</span>
+              <span className="hidden sm:inline">New {profile.studentLevel === 'High School' ? 'Subject' : 'Module'}</span>
             </motion.button>
           </div>
         </nav>
@@ -1520,7 +1502,6 @@ export default function App() {
                   schedule={schedule} 
                   onUpdate={handleUpdateModule} 
                   onUpdateStats={handleUpdateStats} 
-                  onAddAssessment={handleAddAssessment} 
                   onRemove={handleRemoveModule} 
                   onConfirm={confirmAction}
                   onLogStudy={(moduleId: string) => {
@@ -1571,12 +1552,12 @@ export default function App() {
                 <div className="space-y-6">
                   <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8">
                     <h2 className="text-2xl font-bold text-slate-800 mb-2">YouTube Study Resources</h2>
-                    <p className="text-slate-500">Search and analyze YouTube videos for your modules.</p>
+                    <p className="text-slate-500">Search and analyze YouTube videos for your {profile.studentLevel === 'High School' ? 'subjects' : 'modules'}.</p>
                   </div>
                   {modules.length > 0 ? (
                     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                       <div className="lg:col-span-1 space-y-2">
-                        <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-4">Select Module</h3>
+                        <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-4">Select {profile.studentLevel === 'High School' ? 'Subject' : 'Module'}</h3>
                         <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 no-scrollbar">
                           {modules.map(m => (
                             <button
@@ -1605,8 +1586,8 @@ export default function App() {
                             <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
                               <Youtube className="text-indigo-600" size={32} />
                             </div>
-                            <h3 className="text-lg font-bold text-slate-800 mb-2">Select a Module</h3>
-                            <p className="text-slate-500 max-w-xs mx-auto">Choose a module from the list to manage its YouTube study resources.</p>
+                            <h3 className="text-lg font-bold text-slate-800 mb-2">Select a {profile.studentLevel === 'High School' ? 'Subject' : 'Module'}</h3>
+                            <p className="text-slate-500 max-w-xs mx-auto">Choose a {profile.studentLevel === 'High School' ? 'subject' : 'module'} from the list to manage its YouTube study resources.</p>
                           </div>
                          )}
                       </div>
@@ -1614,8 +1595,8 @@ export default function App() {
                   ) : (
                     <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-12 text-center">
                       <BookOpen className="text-slate-200 mx-auto mb-4" size={48} />
-                      <h3 className="text-lg font-bold text-slate-800 mb-2">No Modules Found</h3>
-                      <p className="text-slate-500">Add a module first to use YouTube Study Resources.</p>
+                      <h3 className="text-lg font-bold text-slate-800 mb-2">No {profile.studentLevel === 'High School' ? 'Subjects' : 'Modules'} Found</h3>
+                      <p className="text-slate-500">Add a {profile.studentLevel === 'High School' ? 'subject' : 'module'} first to use YouTube Study Resources.</p>
                     </div>
                   )}
                 </div>
@@ -1652,7 +1633,7 @@ export default function App() {
         
         <div className="space-y-8">
           <section>
-            <h2 className="text-xl font-bold border-b-2 border-indigo-600 pb-2 mb-4">Modules & Assessments</h2>
+            <h2 className="text-xl font-bold border-b-2 border-indigo-600 pb-2 mb-4">{profile.studentLevel === 'High School' ? 'Subjects' : 'Modules'} & Assessments</h2>
             <div className="space-y-6">
               {modules.map(m => (
                 <div key={m.id} className="border-l-4 border-indigo-100 pl-4 py-2">
@@ -2023,7 +2004,7 @@ function DashboardView({ profile, schedule, studyLogs, modules, onExport, setAct
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Modules" value={modules.length} icon={<BookOpen className="text-blue-500" />} />
+        <StatCard label={profile.studentLevel === 'High School' ? 'Subjects' : 'Modules'} value={modules.length} icon={<BookOpen className="text-blue-500" />} />
         <StatCard label="Study Streak" value={`${profile.studyStats?.currentStreak || 0} Days`} icon={<Zap className="text-amber-500" />} />
         <StatCard label="Exams" value={modules.filter((m: any) => m.moduleType === 'Exam').length} icon={<AlertCircle className="text-amber-500" />} />
         <StatCard label="Badges" value={profile.badges?.length || 0} icon={<Award className="text-purple-500" />} />
@@ -2158,9 +2139,9 @@ function DashboardView({ profile, schedule, studyLogs, modules, onExport, setAct
   );
 }
 
-function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpdateStats, onAddAssessment, onRemove, onConfirm, onLogStudy }: any) {
+function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpdateStats, onRemove, onConfirm, onLogStudy }: any) {
   const [filter, setFilter] = useState<string>('all');
-  const [moduleDetailTab, setModuleDetailTab] = useState<'ai_suite' | 'diagrams' | 'youtube' | 'live_lessons'>('ai_suite');
+  const [moduleDetailTab, setModuleDetailTab] = useState<'ai_suite' | 'diagrams' | 'youtube' | 'live_lessons' | 'live_tutor' | 'visuals' | 'research'>('ai_suite');
   const [viewMode, setViewMode] = useState<'list' | 'translator'>('list');
 
   const filteredModules = filter === 'all' 
@@ -2175,13 +2156,13 @@ function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpda
             <button 
               onClick={() => { setFilter('all'); setViewMode('list'); }}
               className="p-2 hover:bg-slate-100 rounded-xl transition-all text-slate-400 hover:text-slate-600"
-              title="Back to all modules"
+              title={`Back to all ${profile.studentLevel === 'High School' ? 'subjects' : 'modules'}`}
             >
               <ArrowLeft size={20} />
             </button>
           )}
           <h2 className="text-2xl font-bold">
-            {filter === 'all' ? (viewMode === 'list' ? 'Your Modules' : 'Academic Translator') : modules.find((m: any) => m.id === filter)?.title}
+            {filter === 'all' ? (viewMode === 'list' ? `Your ${profile.studentLevel === 'High School' ? 'Subjects' : 'Modules'}` : 'Academic Translator') : modules.find((m: any) => m.id === filter)?.title}
           </h2>
         </div>
         
@@ -2193,7 +2174,7 @@ function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpda
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${viewMode === 'list' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-100' : 'text-slate-500 hover:bg-slate-50'}`}
               >
                 <BookOpen size={14} />
-                Modules
+                {profile.studentLevel === 'High School' ? 'Subjects' : 'Modules'}
               </button>
               <button 
                 onClick={() => setViewMode('translator')}
@@ -2210,7 +2191,7 @@ function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpda
             onChange={(e) => { setFilter(e.target.value); setViewMode('list'); }}
             className="bg-white border border-slate-100 rounded-xl px-4 py-2 text-sm font-bold text-slate-600 shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all cursor-pointer"
           >
-            <option value="all">All Modules</option>
+            <option value="all">All {profile.studentLevel === 'High School' ? 'Subjects' : 'Modules'}</option>
             {modules.map((m: any) => (
               <option key={m.id} value={m.id}>{m.title}</option>
             ))}
@@ -2232,7 +2213,6 @@ function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpda
                 communities={communities}
                 schedule={schedule}
                 onUpdate={(u: any) => onUpdate(module.id, u)} 
-                onAddAssessment={() => onAddAssessment(module.id)}
                 onRemove={() => onRemove(module.id)}
                 onConfirm={onConfirm}
                 onViewDetails={() => setFilter(module.id)}
@@ -2268,6 +2248,24 @@ function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpda
                 onClick={() => setModuleDetailTab('live_lessons')} 
                 icon={<Video size={16} />} 
                 label="Live Lessons" 
+              />
+              <TabButton 
+                active={moduleDetailTab === 'live_tutor'} 
+                onClick={() => setModuleDetailTab('live_tutor')} 
+                icon={<Mic size={16} />} 
+                label="Live Tutor" 
+              />
+              <TabButton 
+                active={moduleDetailTab === 'visuals'} 
+                onClick={() => setModuleDetailTab('visuals')} 
+                icon={<ImageIcon size={16} />} 
+                label="Visuals" 
+              />
+              <TabButton 
+                active={moduleDetailTab === 'research'} 
+                onClick={() => setModuleDetailTab('research')} 
+                icon={<SearchIcon size={16} />} 
+                label="Research" 
               />
             </div>
 
@@ -2330,6 +2328,36 @@ function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpda
                   <VirtualClassroomView modules={[filteredModules[0]]} />
                 </motion.div>
               )}
+              {moduleDetailTab === 'live_tutor' && (
+                <motion.div 
+                  key="live_tutor"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                >
+                  <LiveTutorView module={filteredModules[0]} />
+                </motion.div>
+              )}
+              {moduleDetailTab === 'visuals' && (
+                <motion.div 
+                  key="visuals"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                >
+                  <VisualsView module={filteredModules[0]} onUpdate={(u: any) => onUpdate(filteredModules[0].id, u)} />
+                </motion.div>
+              )}
+              {moduleDetailTab === 'research' && (
+                <motion.div 
+                  key="research"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                >
+                  <ResearchView module={filteredModules[0]} />
+                </motion.div>
+              )}
             </AnimatePresence>
           </div>
         )}
@@ -2337,7 +2365,7 @@ function ModulesView({ profile, modules, communities, schedule, onUpdate, onUpda
           <div className="bg-white rounded-[2rem] p-16 border-2 border-dashed border-slate-100 text-center">
             <BookOpen size={48} className="mx-auto text-slate-200 mb-4" />
             <p className="text-slate-400">
-              {filter === 'all' ? 'No modules added yet. Click "New Module" to start.' : 'Selected module not found.'}
+              {filter === 'all' ? `No ${profile.studentLevel === 'High School' ? 'subjects' : 'modules'} added yet. Click "New ${profile.studentLevel === 'High School' ? 'Subject' : 'Module'}" to start.` : `Selected ${profile.studentLevel === 'High School' ? 'subject' : 'module'} not found.`}
             </p>
           </div>
         )}
@@ -9447,7 +9475,7 @@ function VideoExplanationGenerator({ module }: { module: Module }) {
     </div>
   );
 }
-function ModuleCard({ module, profile, modules, communities, schedule, onUpdate, onAddAssessment, onRemove, onConfirm, onViewDetails, onLogStudy, isDetailed }: any) {
+function ModuleCard({ module, profile, modules, communities, schedule, onUpdate, onRemove, onConfirm, onViewDetails, onLogStudy, isDetailed }: any) {
   const [isEditing, setIsEditing] = useState(false);
   const [localModule, setLocalModule] = useState(module);
   const [isUnitsOpen, setIsUnitsOpen] = useState(false);
@@ -9910,7 +9938,18 @@ function ModuleCard({ module, profile, modules, communities, schedule, onUpdate,
         <div className="flex items-center justify-between mb-6">
           <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400">Assignments & Tasks</h4>
           {isEditing && (
-            <button onClick={onAddAssessment} className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
+            <button onClick={() => {
+              const newAss = {
+                id: crypto.randomUUID(),
+                title: 'New Assignment',
+                dueDate: new Date().toISOString().split('T')[0],
+                dueTime: '23:59',
+                weight: 10,
+                status: 'Incomplete',
+                studyUnits: []
+              };
+              updateLocal({ assessments: [...(localModule.assessments || []), newAss] });
+            }} className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
               <Plus size={14} /> Add Task
             </button>
           )}
