@@ -65,9 +65,18 @@
         "title": { "type": "string" },
         "moduleType": { "type": "string", "enum": ["Exam", "Portfolio", "Assessment Only"] },
         "passMark": { "type": "number", "description": "Pass mark percentage for this module" },
+        "yearMarkWeight": { "type": "number", "description": "Weight of assignments toward final mark (%)" },
+        "examWeight": { "type": "number", "description": "Weight of exam/portfolio toward final mark (%)" },
+        "examMark": { "type": "number", "description": "Mark received in exam/portfolio (%)" },
         "examDate": { "type": "string" },
         "portfolioDate": { "type": "string" },
+        "assessments": {
+          "type": "array",
+          "items": { "$ref": "Assessment" }
+        },
         "masteryScore": { "type": "number", "description": "Overall module mastery score (0-100)" },
+        "videoTranscription": { "type": "string", "description": "Transcript of the video explanation" },
+        "learningOutcomes": { "type": "array", "items": { "type": "string" }, "description": "AI identified learning outcomes" },
         "units": {
           "type": "array",
           "items": { "$ref": "StudyUnit" }

@@ -1,15 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Mic, Square, Play, Pause, Image as ImageIcon, Video, Search, MapPin, Loader2, Download } from 'lucide-react';
+import { Mic, Square, Play, Pause, Image as ImageIcon, Video, Search, MapPin, Loader2, Download, MessageSquare } from 'lucide-react';
 import { GoogleGenAI, Modality, LiveServerMessage } from '@google/genai';
 import Markdown from 'react-markdown';
 
 // --- Live Tutor View ---
-export function LiveTutorView({ module }: any) {
+export function LiveTutorView({ module, profile }: any) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<{role: string, text: string}[]>([]);
+  
+  const [textInput, setTextInput] = useState('');
   
   const aiRef = useRef<any>(null);
   const sessionRef = useRef<any>(null);
@@ -17,6 +19,13 @@ export function LiveTutorView({ module }: any) {
   const streamRef = useRef<MediaStream | null>(null);
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const nextPlayTimeRef = useRef<number>(0);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
 
   useEffect(() => {
     return () => {
@@ -30,20 +39,37 @@ export function LiveTutorView({ module }: any) {
     setMessages([]);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = process.env.GEMINI_API_KEY;
+      const placeholders = ["MY_GEMINI_API_KEY", "YOUR_API_KEY", "YOUR_GEMINI_API_KEY", "ENTER_YOUR_KEY_HERE", "GEMINI_API_KEY"];
+      if (!apiKey || placeholders.includes(apiKey)) {
+        throw new Error("API Key is missing or invalid. Please ensure GEMINI_API_KEY is set in the Secrets panel (⚙️ gear icon -> Secrets).");
+      }
+      const ai = new GoogleGenAI({ apiKey });
       aiRef.current = ai;
 
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       nextPlayTimeRef.current = audioContextRef.current.currentTime;
 
       const sessionPromise = ai.live.connect({
-        model: "gemini-2.5-flash-native-audio-preview-09-2025",
+        model: "gemini-2.5-flash-native-audio-preview-12-2025",
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
           },
-          systemInstruction: `You are a helpful and encouraging tutor for the subject: ${module.title}. Keep your answers concise and engaging.`,
+          systemInstruction: `You are a helpful and encouraging tutor for the subject: ${module.title}. 
+          Your student is at the ${profile?.studentLevel || 'University'} level${profile?.educationPhase ? ` (${profile.educationPhase})` : ''}${profile?.yearGrade ? `, specifically in ${profile.yearGrade}` : ''}.
+          
+          CRITICAL ADAPTATION RULES:
+          1. Adapt your teaching style, complexity of explanations, and vocabulary to match this educational level.
+          2. For Primary School: Use very simple language, short sentences, and fun examples.
+          3. For High School: Use clear language but introduce subject-specific terminology.
+          4. For University/College: Use academic terminology and encourage critical thinking.
+          5. For Training: Focus on practical application and industry standards.
+          
+          Keep your answers concise and engaging.`,
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
         },
         callbacks: {
           onopen: async () => {
@@ -74,7 +100,7 @@ export function LiveTutorView({ module }: any) {
                 sessionPromise.then((session: any) => {
                   if (isConnected) {
                     session.sendRealtimeInput({
-                      media: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+                      audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
                     });
                   }
                 });
@@ -91,17 +117,43 @@ export function LiveTutorView({ module }: any) {
             }
           },
           onmessage: async (message: LiveServerMessage) => {
-            if (message.serverContent?.modelTurn?.parts) {
-              for (const part of message.serverContent.modelTurn.parts) {
+            const anyMsg = message as any;
+
+            // Handle model output (audio and text transcription)
+            if (anyMsg.serverContent?.modelTurn?.parts) {
+              for (const part of anyMsg.serverContent.modelTurn.parts) {
                 if (part.inlineData && part.inlineData.data) {
                   const base64Audio = part.inlineData.data;
                   playAudioChunk(base64Audio);
                 }
                 if (part.text) {
-                  setMessages(prev => [...prev, { role: 'model', text: part.text! }]);
+                  setMessages(prev => {
+                    const last = prev[prev.length - 1];
+                    if (last && last.role === 'model') {
+                      return [...prev.slice(0, -1), { role: 'model', text: last.text + part.text! }];
+                    }
+                    return [...prev, { role: 'model', text: part.text! }];
+                  });
                 }
               }
             }
+            
+            // Handle user input transcription
+            if (anyMsg.serverContent?.userTurn?.parts) {
+              for (const part of anyMsg.serverContent.userTurn.parts) {
+                if (part.text) {
+                  setMessages(prev => {
+                    // Avoid duplicate messages if we just sent text manually
+                    const last = prev[prev.length - 1];
+                    if (last && last.role === 'user' && last.text === part.text) {
+                      return prev;
+                    }
+                    return [...prev, { role: 'user', text: part.text! }];
+                  });
+                }
+              }
+            }
+
             if (message.serverContent?.interrupted) {
               if (audioContextRef.current) {
                 nextPlayTimeRef.current = audioContextRef.current.currentTime;
@@ -126,6 +178,18 @@ export function LiveTutorView({ module }: any) {
       setError(err.message || "Failed to start session.");
       setIsConnecting(false);
     }
+  };
+
+  const sendTextMessage = () => {
+    if (!textInput.trim() || !sessionRef.current) return;
+    
+    const text = textInput.trim();
+    sessionRef.current.sendRealtimeInput({
+      text: text
+    });
+    
+    setMessages(prev => [...prev, { role: 'user', text: text }]);
+    setTextInput('');
   };
 
   const playAudioChunk = (base64Data: string) => {
@@ -210,21 +274,77 @@ export function LiveTutorView({ module }: any) {
         </div>
       )}
 
-      <div className="h-[300px] bg-slate-50 rounded-2xl border border-slate-100 p-6 flex flex-col items-center justify-center relative overflow-hidden">
-        {isConnected ? (
-          <div className="flex flex-col items-center gap-6">
-            <div className="w-32 h-32 rounded-full bg-indigo-100 flex items-center justify-center relative">
-              <div className="absolute inset-0 bg-indigo-500 rounded-full animate-ping opacity-20"></div>
-              <Mic size={48} className="text-indigo-600" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="h-[400px] bg-slate-50 rounded-2xl border border-slate-100 p-6 flex flex-col items-center justify-center relative overflow-hidden">
+          {isConnected ? (
+            <div className="flex flex-col items-center gap-6">
+              <div className="w-32 h-32 rounded-full bg-indigo-100 flex items-center justify-center relative">
+                <div className="absolute inset-0 bg-indigo-500 rounded-full animate-ping opacity-20"></div>
+                <Mic size={48} className="text-indigo-600" />
+              </div>
+              <p className="text-lg font-bold text-slate-600 animate-pulse">Listening & Speaking...</p>
             </div>
-            <p className="text-lg font-bold text-slate-600 animate-pulse">Listening & Speaking...</p>
+          ) : (
+            <div className="text-center text-slate-400">
+              <Mic size={48} className="mx-auto mb-4 opacity-50" />
+              <p>Click "Start Conversation" to begin.</p>
+            </div>
+          )}
+        </div>
+
+        <div className="h-[400px] flex flex-col bg-white rounded-2xl border border-slate-100 overflow-hidden">
+          <div className="p-4 border-b border-slate-50 bg-slate-50/50">
+            <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+              <MessageSquare size={16} className="text-indigo-500" />
+              Conversation History
+            </h4>
           </div>
-        ) : (
-          <div className="text-center text-slate-400">
-            <Mic size={48} className="mx-auto mb-4 opacity-50" />
-            <p>Click "Start Conversation" to begin.</p>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {messages.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
+                No messages yet. Start speaking or type below!
+              </div>
+            ) : (
+              messages.map((msg, i) => (
+                <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 px-2">
+                    {msg.role === 'user' ? 'You' : 'AI Tutor'}
+                  </span>
+                  <div className={`max-w-[85%] p-4 rounded-2xl text-sm shadow-sm ${
+                    msg.role === 'user' 
+                      ? 'bg-indigo-600 text-white rounded-tr-none' 
+                      : 'bg-white border border-slate-100 text-slate-700 rounded-tl-none'
+                  }`}>
+                    <Markdown>{msg.text}</Markdown>
+                  </div>
+                </div>
+              ))
+            )}
+            <div ref={chatEndRef} />
           </div>
-        )}
+
+          {isConnected && (
+            <div className="p-4 border-t border-slate-50 bg-slate-50/30">
+              <div className="flex gap-2">
+                <input 
+                  type="text"
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && sendTextMessage()}
+                  placeholder="Type a message to the tutor..."
+                  className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+                <button 
+                  onClick={sendTextMessage}
+                  disabled={!textInput.trim()}
+                  className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all disabled:opacity-50"
+                >
+                  <Play size={18} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -246,7 +366,12 @@ export function VisualsView({ module, onUpdate }: any) {
     setGeneratedImage(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = process.env.GEMINI_API_KEY;
+      const placeholders = ["MY_GEMINI_API_KEY", "YOUR_API_KEY", "YOUR_GEMINI_API_KEY", "ENTER_YOUR_KEY_HERE", "GEMINI_API_KEY"];
+      if (!apiKey || placeholders.includes(apiKey)) {
+        throw new Error("API Key is missing or invalid. Please ensure GEMINI_API_KEY is set in the Secrets panel (⚙️ gear icon -> Secrets).");
+      }
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-3.1-flash-image-preview',
         contents: {
@@ -294,7 +419,12 @@ export function VisualsView({ module, onUpdate }: any) {
 
     try {
       // Create a new instance after key selection
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || process.env.GEMINI_API_KEY });
+      const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+      const placeholders = ["MY_GEMINI_API_KEY", "YOUR_API_KEY", "YOUR_GEMINI_API_KEY", "ENTER_YOUR_KEY_HERE", "GEMINI_API_KEY"];
+      if (!apiKey || placeholders.includes(apiKey)) {
+        throw new Error("API Key is missing or invalid. Please ensure GEMINI_API_KEY is set in the Secrets panel (⚙️ gear icon -> Secrets).");
+      }
+      const ai = new GoogleGenAI({ apiKey });
       
       const base64Data = generatedImage.split(',')[1];
       const mimeType = generatedImage.split(';')[0].split(':')[1];
@@ -433,7 +563,12 @@ export function ResearchView({ module }: any) {
     setGroundingChunks([]);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = process.env.GEMINI_API_KEY;
+      const placeholders = ["MY_GEMINI_API_KEY", "YOUR_API_KEY", "YOUR_GEMINI_API_KEY", "ENTER_YOUR_KEY_HERE", "GEMINI_API_KEY"];
+      if (!apiKey || placeholders.includes(apiKey)) {
+        throw new Error("API Key is missing or invalid. Please ensure GEMINI_API_KEY is set in the Secrets panel (⚙️ gear icon -> Secrets).");
+      }
+      const ai = new GoogleGenAI({ apiKey });
       
       let response;
       if (searchType === 'web') {

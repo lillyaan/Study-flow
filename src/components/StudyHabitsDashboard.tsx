@@ -76,14 +76,24 @@ const StudyHabitsDashboard: React.FC<StudyHabitsDashboardProps> = ({ modules, sc
       value: Math.round(value / 60 * 10) / 10 // Convert to hours
     })).sort((a, b) => b.value - a.value);
 
-    const hourlyData = hourlyDistribution.map((value, hour) => ({
-      hour: `${hour}:00`,
-      value: Math.round(value / 60 * 10) / 10
-    }));
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const dailyData = days.map((day, index) => {
+      const dayIndex = (index + 1) % 7; // Monday is 1, Sunday is 0
+      const value = dailyDistribution[dayIndex];
+      return {
+        day,
+        value: Math.round(value / 60 * 10) / 10
+      };
+    });
 
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const dailyData = dailyDistribution.map((value, day) => ({
-      day: days[day],
+    const formatHour = (h: number) => {
+      if (h === 0) return '12 AM';
+      if (h === 12) return '12 PM';
+      return h > 12 ? `${h - 12} PM` : `${h} AM`;
+    };
+
+    const hourlyData = hourlyDistribution.map((value, hour) => ({
+      hour: formatHour(hour),
       value: Math.round(value / 60 * 10) / 10
     }));
 
@@ -358,6 +368,12 @@ const StudyHabitsDashboard: React.FC<StudyHabitsDashboardProps> = ({ modules, sc
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dailyData}>
+                <defs>
+                  <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#6366f1" stopOpacity={1} />
+                    <stop offset="100%" stopColor="#818cf8" stopOpacity={0.8} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis 
                   dataKey="day" 
@@ -373,8 +389,9 @@ const StudyHabitsDashboard: React.FC<StudyHabitsDashboardProps> = ({ modules, sc
                 <Tooltip 
                   cursor={{ fill: '#f8fafc' }}
                   contentStyle={{ borderRadius: '1.5rem', border: 'none', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}
+                  formatter={(value: number) => [`${value} hrs`, 'Study Time']}
                 />
-                <Bar dataKey="value" fill="#6366f1" radius={[6, 6, 0, 0]} barSize={32} />
+                <Bar dataKey="value" fill="url(#barGradient)" radius={[6, 6, 0, 0]} barSize={32} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -394,7 +411,7 @@ const StudyHabitsDashboard: React.FC<StudyHabitsDashboardProps> = ({ modules, sc
               <AreaChart data={hourlyData}>
                 <defs>
                   <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4}/>
                     <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
@@ -413,6 +430,7 @@ const StudyHabitsDashboard: React.FC<StudyHabitsDashboardProps> = ({ modules, sc
                 />
                 <Tooltip 
                   contentStyle={{ borderRadius: '1.5rem', border: 'none', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}
+                  formatter={(value: number) => [`${value} hrs`, 'Study Intensity']}
                 />
                 <Area 
                   type="monotone" 
@@ -421,6 +439,7 @@ const StudyHabitsDashboard: React.FC<StudyHabitsDashboardProps> = ({ modules, sc
                   strokeWidth={4}
                   fillOpacity={1} 
                   fill="url(#colorValue)" 
+                  animationDuration={1500}
                 />
               </AreaChart>
             </ResponsiveContainer>

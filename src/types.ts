@@ -1,11 +1,17 @@
-export type StudyType = 'Foundation Phase' | 'Intermediate Phase' | 'Senior Phase' | 'FET Phase' | 'University';
-export type ModuleType = 'Exam' | 'Portfolio' | 'Assessment Only';
+export type StudyType = 'Primary School' | 'High School' | 'University' | 'College' | 'Training';
+export type EducationPhase = 'Foundation Phase' | 'Intermediate Phase' | 'Senior Phase' | 'FET Phase';
+export enum ModuleType {
+  Exam = 'Exam',
+  Portfolio = 'Portfolio',
+  AssessmentOnly = 'Assessment Only'
+}
 
 export type AssessmentStatus = 'Done' | 'In Progress' | 'Missed' | 'Incomplete';
 
 export interface PastPaper {
   id: string;
   subject: string;
+  grade: 10 | 11 | 12;
   year: number;
   month: 'Feb/Mar' | 'May/June' | 'Oct/Nov' | 'March' | 'June' | 'October' | 'November';
   paperNumber: 1 | 2 | 3;
@@ -18,6 +24,7 @@ export interface PastPaper {
 export interface Assessment {
   id: string;
   title: string;
+  type?: string;
   dueDate: string;
   dueTime?: string;
   weight: number;
@@ -145,6 +152,7 @@ export interface Module {
   isLanguage?: boolean; // Explicitly indicate if this is a language module
   videoSlides?: VideoSlide[];
   videoAudioUrl?: string;
+  videoTranscription?: string;
 }
 
 export interface Badge {
@@ -174,6 +182,7 @@ export interface UserProfile {
   username: string;
   institution: string;
   studentLevel: StudyType;
+  educationPhase?: EducationPhase;
   yearGrade: string;
   country?: string;
   cellPhone?: string;
@@ -188,12 +197,19 @@ export interface UserProfile {
   photoURL?: string;
   bannerURL?: string;
   bio?: string;
+  studyGoal?: string;
   themeColor?: string;
+  notificationPreferences?: {
+    email: boolean;
+    push: boolean;
+    studyReminders: boolean;
+  };
   interests?: string[];
   socialLinks?: { platform: string; url: string }[];
   sharedWith?: string[]; // UIDs of users who can see this profile
   badges?: Badge[];
   studyStats?: StudyStats;
+  createdAt?: any;
   studyPreferences?: {
     preferredStartTime: string; // "09:00"
     preferredEndTime: string;   // "21:00"
@@ -241,11 +257,13 @@ export interface ChatMessage {
 export interface ScheduleItem {
   id: string;
   title: string;
-  type: 'assignment' | 'assessment_due' | 'exam_prep' | 'exam' | 'portfolio_prep' | 'portfolio' | 'study_session';
+  type: 'assignment' | 'assessment_due' | 'exam_prep' | 'exam' | 'portfolio_prep' | 'portfolio' | 'study_session' | 'TASK' | 'LECTURE' | 'STUDY_SESSION' | 'EXAM' | 'EXAM_PREP';
   start: Date;
   end: Date;
   moduleId?: string;
   completed?: boolean;
+  isAiGenerated?: boolean;
+  isManual?: boolean;
 }
 
 export interface StudyLog {

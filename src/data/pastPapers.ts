@@ -4,6 +4,7 @@ export const PAST_PAPERS: PastPaper[] = [
   {
     id: '1',
     subject: 'Mathematics',
+    grade: 12,
     year: 2023,
     month: 'November',
     paperNumber: 1,
@@ -15,6 +16,7 @@ export const PAST_PAPERS: PastPaper[] = [
   {
     id: '2',
     subject: 'Physical Sciences',
+    grade: 12,
     year: 2023,
     month: 'November',
     paperNumber: 1,
@@ -26,6 +28,7 @@ export const PAST_PAPERS: PastPaper[] = [
   {
     id: '3',
     subject: 'Life Sciences',
+    grade: 12,
     year: 2023,
     month: 'November',
     paperNumber: 1,
@@ -36,6 +39,7 @@ export const PAST_PAPERS: PastPaper[] = [
   {
     id: '4',
     subject: 'Accounting',
+    grade: 12,
     year: 2022,
     month: 'November',
     paperNumber: 1,
@@ -46,6 +50,7 @@ export const PAST_PAPERS: PastPaper[] = [
   {
     id: '5',
     subject: 'English Home Language',
+    grade: 12,
     year: 2023,
     month: 'November',
     paperNumber: 1,
@@ -53,8 +58,76 @@ export const PAST_PAPERS: PastPaper[] = [
     province: 'KwaZulu-Natal',
     url: 'https://www.education.gov.za/Portals/0/CD/2023%20November%20Exams/English%20HL%20P1%20Nov%202023.pdf',
     memoUrl: 'https://www.education.gov.za/Portals/0/CD/2023%20November%20Exams/English%20HL%20P1%20Nov%202023%20Memo.pdf'
+  },
+  {
+    id: 'ieb-maths-2023',
+    subject: 'Mathematics',
+    grade: 12,
+    year: 2023,
+    month: 'November',
+    paperNumber: 1,
+    board: 'IEB',
+    url: 'https://www.ieb.co.za/assessment/high-schools/national-senior-certificate/nsc-past-papers',
+    memoUrl: 'https://www.ieb.co.za/assessment/high-schools/national-senior-certificate/nsc-past-papers'
+  },
+  {
+    id: 'ieb-physics-2023',
+    subject: 'Physical Sciences',
+    grade: 12,
+    year: 2023,
+    month: 'November',
+    paperNumber: 1,
+    board: 'IEB',
+    url: 'https://www.ieb.co.za/assessment/high-schools/national-senior-certificate/nsc-past-papers',
+    memoUrl: 'https://www.ieb.co.za/assessment/high-schools/national-senior-certificate/nsc-past-papers'
+  },
+  {
+    id: 'ieb-business-2023',
+    subject: 'Business Studies',
+    grade: 12,
+    year: 2023,
+    month: 'November',
+    paperNumber: 1,
+    board: 'IEB',
+    url: 'https://www.ieb.co.za/assessment/high-schools/national-senior-certificate/nsc-past-papers',
+    memoUrl: 'https://www.ieb.co.za/assessment/high-schools/national-senior-certificate/nsc-past-papers'
+  },
+  {
+    id: 'ieb-english-2023',
+    subject: 'English Home Language',
+    grade: 12,
+    year: 2023,
+    month: 'November',
+    paperNumber: 1,
+    board: 'IEB',
+    url: 'https://www.ieb.co.za/assessment/high-schools/national-senior-certificate/nsc-past-papers',
+    memoUrl: 'https://www.ieb.co.za/assessment/high-schools/national-senior-certificate/nsc-past-papers'
+  },
+  {
+    id: 'ieb-accounting-p1-may-2021',
+    subject: 'Accounting',
+    grade: 12,
+    year: 2021,
+    month: 'June', // May/June session
+    paperNumber: 1,
+    board: 'IEB',
+    url: 'https://www.ieb.co.za/assessment/high-schools/national-senior-certificate/nsc-past-papers',
+    memoUrl: 'https://www.ieb.co.za/assessment/high-schools/national-senior-certificate/nsc-past-papers'
+  },
+  {
+    id: 'ieb-accounting-p2-may-2021',
+    subject: 'Accounting',
+    grade: 12,
+    year: 2021,
+    month: 'June', // May/June session
+    paperNumber: 2,
+    board: 'IEB',
+    url: 'https://www.ieb.co.za/assessment/high-schools/national-senior-certificate/nsc-past-papers',
+    memoUrl: 'https://www.ieb.co.za/assessment/high-schools/national-senior-certificate/nsc-past-papers'
   }
 ];
+
+export const GRADES = [10, 11, 12];
 
 export const PROVINCES = [
   'Gauteng',
