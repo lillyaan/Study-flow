@@ -26,17 +26,30 @@ interface TutorSidebarProps {
   isOpen: boolean;
   onClose: () => void;
   profile: any;
+  module?: any;
 }
 
-export function TutorSidebar({ isOpen, onClose, profile }: TutorSidebarProps) {
+export function TutorSidebar({ isOpen, onClose, profile, module }: TutorSidebarProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
       role: 'model',
-      text: `Hi ${profile?.firstName || 'there'}! I'm your AI study tutor. I can help you summarize notes, explain complex topics, or even review your documents. What are we studying today?`,
+      text: `Hi ${profile?.firstName || 'there'}! I'm your AI study tutor${module ? ` for ${module.title}` : ''}. I can help you summarize notes, explain complex topics, or even review your documents. What are we studying today?`,
       timestamp: new Date(),
     }
   ]);
+
+  useEffect(() => {
+    setMessages([
+      {
+        id: '1',
+        role: 'model',
+        text: `Hi ${profile?.firstName || 'there'}! I'm your AI study tutor${module ? ` for ${module.title}` : ''}. I can help you summarize notes, explain complex topics, or even review your documents. What are we studying today?`,
+        timestamp: new Date(),
+      }
+    ]);
+  }, [module?.id]);
+
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<{ name: string; type: string; data: string }[]>([]);
@@ -118,9 +131,11 @@ export function TutorSidebar({ isOpen, onClose, profile }: TutorSidebarProps) {
         model: "gemini-3-flash-preview",
         contents: [...history, { role: 'user', parts: currentParts }],
         config: {
-          systemInstruction: `You are a helpful and encouraging AI Study Tutor. 
+          systemInstruction: `You are a helpful and encouraging AI Study Tutor${module ? ` for the module: ${module.title}` : ''}. 
           The student's name is ${profile?.firstName || 'Student'}.
           They are at the ${profile?.studentLevel || 'University'} level.
+          ${module?.videoTranscription ? `Context about this module: ${module.videoTranscription}` : ''}
+          ${module?.notes ? `Notes about this module: ${module.notes}` : ''}
           Provide clear, concise, and accurate explanations. 
           If documents are provided, prioritize information from them while adding your own expert knowledge.
           Use Markdown for formatting.`,

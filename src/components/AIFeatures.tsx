@@ -1,10 +1,77 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { motion } from 'motion/react';
-import { Mic, Square, Play, Pause, Image as ImageIcon, Video, Search, MapPin, Loader2, Download, MessageSquare } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Mic, Square, Play, Pause, Image as ImageIcon, Video, Search, MapPin, Loader2, Download, MessageSquare, BookOpen } from 'lucide-react';
 import { GoogleGenAI, Modality, LiveServerMessage } from '@google/genai';
 import Markdown from 'react-markdown';
 
-// --- Live Tutor View ---
+// ... (existing code)
+
+// --- Animated Diagram View ---
+export function AnimatedDiagramView({ module, onUpdate }: any) {
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [diagramData, setDiagramData] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const generateDiagram = async () => {
+    setIsGenerating(true);
+    setError(null);
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) throw new Error("API Key missing");
+      const ai = new GoogleGenAI({ apiKey });
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Create an animated diagram concept for the module: ${module.title}.
+        Content: ${module.videoTranscription || module.notes || 'N/A'}
+        Return a JSON object with:
+        - title: string
+        - elements: array of {id: string, label: string, type: 'circle' | 'rect'}
+        - connections: array of {from: string, to: string}
+        - animationType: 'flow' | 'pulse' | 'rotate'
+        `,
+        config: {
+          responseMimeType: "application/json",
+        }
+      });
+      setDiagramData(JSON.parse(response.text || "{}"));
+    } catch (err: any) {
+      setError("Failed to generate diagram.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
+      <h3 className="text-xl font-bold mb-2">Animated Diagram</h3>
+      <button onClick={generateDiagram} disabled={isGenerating} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold">
+        {isGenerating ? 'Generating...' : 'Generate Diagram'}
+      </button>
+      {diagramData && (
+        <div className="mt-6 p-4 border rounded-xl">
+          <h4 className="font-bold">{diagramData.title}</h4>
+          <div className="relative h-64 w-full mt-4">
+            {diagramData.elements?.map((el: any, i: number) => (
+              <motion.div 
+                key={el.id}
+                initial={{ opacity: 0, scale: 0 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className={`absolute p-2 border ${el.type === 'circle' ? 'rounded-full' : 'rounded-lg'}`}
+                style={{ top: `${(i * 20) % 80}%`, left: `${(i * 30) % 80}%` }}
+              >
+                {el.label}
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ... (rest of the file)
+
 export function LiveTutorView({ module, profile }: any) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);

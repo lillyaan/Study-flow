@@ -314,7 +314,7 @@ import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, 
 import PastPapersView from './components/PastPapersView';
 import UniversityPortal from './components/UniversityPortal';
 import StudyHabitsDashboard from './components/StudyHabitsDashboard';
-import { LiveTutorView, VisualsView, ResearchView } from './components/AIFeatures';
+import { LiveTutorView, VisualsView, ResearchView, AnimatedDiagramView } from './components/AIFeatures';
 import { TutorSidebar } from './components/TutorSidebar';
 import { 
   LineChart, 
@@ -1028,6 +1028,7 @@ export default function App() {
           isOpen={isAiTutorOpen} 
           onClose={() => setIsAiTutorOpen(false)} 
           profile={profile} 
+          module={modules.find(m => m.id === selectedLogModuleId)}
         />
 
         {/* Modals & Dialogs */}
@@ -2146,10 +2147,14 @@ function ModuleChatModal({ module, onClose, onUpdate, onUpdateUnit, onStudyFlash
       onUpdate({ chatHistory: finalMessages });
     } catch (error) {
       console.error("Chat Error:", error);
+      const errorMessageText = error instanceof Error && error.message.includes("API Key") 
+        ? error.message 
+        : "Sorry, I encountered an error. Please try again.";
+      
       const errorMessage: ModuleChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'model',
-        text: "Sorry, I encountered an error. Please try again.",
+        text: errorMessageText,
         timestamp: new Date()
       };
       setMessages([...newMessages, errorMessage]);
@@ -2233,9 +2238,14 @@ function ModuleChatModal({ module, onClose, onUpdate, onUpdateUnit, onStudyFlash
                 Units
               </button>
             </div>
-            <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-all">
-              <X size={24} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={handleSaveChat} className="p-2 hover:bg-white/10 rounded-lg transition-all" title="Save Chat">
+                <Download size={20} />
+              </button>
+              <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-all">
+                <X size={24} />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -2292,14 +2302,12 @@ function ModuleChatModal({ module, onClose, onUpdate, onUpdateUnit, onStudyFlash
                             <p className={`text-[10px] opacity-50`}>
                               {format(safeDate(m.timestamp), 'HH:mm')}
                             </p>
-                            {m.role === 'user' && (
                               <button 
                                 onClick={() => handleEditMessage(m.id, m.text)}
-                                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-white/10 rounded transition-all"
+                                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-black/10 rounded transition-all"
                               >
                                 <Edit2 size={10} />
                               </button>
-                            )}
                           </div>
                         </>
                       )}
@@ -2545,7 +2553,13 @@ function ModuleSummaryModal({ module, onClose, onUpdate }: any) {
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: `Please provide a concise and well-structured summary of the following study module content. Use bullet points for key takeaways and keep it academic yet accessible.
+        contents: `Please provide a concise and well-structured summary of the following study module content. 
+        Include the following sections:
+        1. **Module Summary**: A brief overview of the content.
+        2. **Learning Outcomes**: A bulleted list of what the student will achieve or understand.
+        3. **Key Takeaways**: A bulleted list of the most important concepts.
+
+        Keep the tone academic yet accessible.
         
         ${content}`,
         config: {
@@ -3073,6 +3087,29 @@ function ModuleQuizModal({ module, onClose, onUpdate }: any) {
           >
             Close
           </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function ModuleAnimatedDiagramModal({ module, onClose, onUpdate }: any) {
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4 md:p-6">
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="bg-white rounded-[2rem] w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col"
+      >
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="font-bold">{module.title} Animated Diagram</h3>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-all">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6">
+          <AnimatedDiagramView module={module} onUpdate={onUpdate} />
         </div>
       </motion.div>
     </div>
@@ -3837,6 +3874,7 @@ function ModulesView({ modules, profile, onAdd, onUpdate, onDelete, onUpdateUnit
   const [studyingFlashcards, setStudyingFlashcards] = useState<any>(null);
   const [quizModule, setQuizModule] = useState<any>(null);
   const [visualizingModule, setVisualizingModule] = useState<any>(null);
+  const [animatedDiagramModule, setAnimatedDiagramModule] = useState<any>(null);
   const [liveTutorModule, setLiveTutorModule] = useState<any>(null);
   const [planningModule, setPlanningModule] = useState<any>(null);
   const [activeToolMenu, setActiveToolMenu] = useState<string | null>(null);
@@ -4016,6 +4054,18 @@ function ModulesView({ modules, profile, onAdd, onUpdate, onDelete, onUpdateUnit
                         <div className="h-px bg-slate-100 my-2 mx-2"></div>
                         <button 
                           onClick={() => {
+                            setAnimatedDiagramModule(module);
+                            setActiveToolMenu(null);
+                          }}
+                          className="w-full flex items-center gap-3 p-3 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-2xl transition-all text-sm font-bold"
+                        >
+                          <div className="w-8 h-8 bg-indigo-100 rounded-xl flex items-center justify-center">
+                            <ImageIcon size={16} className="text-indigo-500" />
+                          </div>
+                          Animated Diagram
+                        </button>
+                        <button 
+                          onClick={() => {
                             setQuizModule(module);
                             setActiveToolMenu(null);
                           }}
@@ -4137,6 +4187,14 @@ function ModulesView({ modules, profile, onAdd, onUpdate, onDelete, onUpdateUnit
           module={visualizingModule}
           onClose={() => setVisualizingModule(null)}
           onUpdate={(updates: any) => onUpdate(visualizingModule.id, updates)}
+        />
+      )}
+
+      {animatedDiagramModule && (
+        <ModuleAnimatedDiagramModal 
+          module={animatedDiagramModule}
+          onClose={() => setAnimatedDiagramModule(null)}
+          onUpdate={(updates: any) => onUpdate(animatedDiagramModule.id, updates)}
         />
       )}
 
